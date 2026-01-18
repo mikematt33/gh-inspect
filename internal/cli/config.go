@@ -67,7 +67,6 @@ func init() {
 			"analyzers.issue_hygiene.params.zombie_threshold_days",
 			"analyzers.repo_health.enabled",
 			"analyzers.ci.enabled",
-			// Add more valid keys manually or reflection based if possible, manual is safer for now.
 		}, cobra.ShellCompDirectiveNoFileComp
 	}
 
