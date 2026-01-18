@@ -20,6 +20,9 @@ var (
 It measures commit patterns, PR velocity, issue hygiene, CI stability, and more to provide a holistic health score.`,
 		Version:          Version,
 		PersistentPreRun: checkAndInitConfig,
+		CompletionOptions: cobra.CompletionOptions{
+			DisableDefaultCmd: true,
+		},
 	}
 
 	runCmd = &cobra.Command{
@@ -51,8 +54,8 @@ func Execute() {
 }
 
 func checkAndInitConfig(cmd *cobra.Command, args []string) {
-	// Skip for init, config, help, completion
-	if cmd == initCmd || cmd == configCmd || cmd.Name() == "help" || cmd.Name() == "completion" || cmd.Name() == "__complete" {
+	// Skip for init, config, help, completion, and the new auth command
+	if cmd == initCmd || cmd == configCmd || cmd == authCmd || cmd.Name() == "help" || cmd.Name() == "completion" || cmd.Name() == "__complete" {
 		return
 	}
 
@@ -63,6 +66,7 @@ func checkAndInitConfig(cmd *cobra.Command, args []string) {
 	}
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		// Auto-initialize default config when missing for commands other than auth/init/config.
 		fmt.Printf("ℹ️  Config not found at %s. Initializing default configuration...\n", configPath)
 		if err := createDefaultConfig(configPath); err != nil {
 			fmt.Printf("⚠️  Failed to auto-create config: %v\n", err)
@@ -75,14 +79,29 @@ func checkAndInitConfig(cmd *cobra.Command, args []string) {
 func init() {
 	rootCmd.AddCommand(runCmd)
 	runCmd.Flags().StringVarP(&flagFormat, "format", "f", "text", "Output format (text, json)")
+	runCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"text", "json"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
 	runCmd.Flags().StringVarP(&flagSince, "since", "s", "30d", "Lookback window (e.g. 30d, 24h)")
+	runCmd.RegisterFlagCompletionFunc("since", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"30d", "90d", "180d", "24h", "720h"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
 	runCmd.Flags().BoolVarP(&flagDeep, "deep", "d", false, "Enable deep scanning (warning: consumes more API rate limit)")
 	runCmd.Flags().IntVar(&flagFail, "fail-under", 0, "Exit with error code 1 if average health score is below this value")
 
 	// Register compare command
 	rootCmd.AddCommand(compareCmd)
 	compareCmd.Flags().StringVarP(&flagFormat, "format", "f", "text", "Output format (text, json)")
+	compareCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"text", "json"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
 	compareCmd.Flags().StringVarP(&flagSince, "since", "s", "30d", "Lookback window (e.g. 30d, 24h)")
+	compareCmd.RegisterFlagCompletionFunc("since", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"30d", "90d", "180d", "24h", "720h"}, cobra.ShellCompDirectiveNoFileComp
+	})
 	compareCmd.Flags().BoolVarP(&flagDeep, "deep", "d", false, "Enable deep scanning (warning: consumes more API rate limit)")
 }
 

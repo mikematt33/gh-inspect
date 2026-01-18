@@ -55,7 +55,10 @@ var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Generate a default configuration file",
 	Long: `Creates a default configuration file (config.yaml) in your user configuration directory if it doesn't exist.
-Use this to customize analysis thresholds, enable/disable specific analyzers, and set global defaults.`,
+Use this to customize analysis thresholds, enable/disable specific analyzers, and set global defaults.
+
+Note: 'gh-inspect run', 'org', etc. will automatically create this file if it's missing.
+'gh-inspect init' is useful if you want to inspect or customize the config before running any analysis.`,
 	Run: runInit,
 }
 
