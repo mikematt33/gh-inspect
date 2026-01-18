@@ -15,8 +15,18 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
+)
+
+// httpClient is used for all HTTP requests with a reasonable timeout
+var httpClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
+
+var (
+	updateCheckOnly bool
 )
 
 var updateCmd = &cobra.Command{
@@ -29,6 +39,7 @@ This command replaces the current binary with the latest version available.`,
 
 func init() {
 	rootCmd.AddCommand(updateCmd)
+	updateCmd.Flags().BoolVar(&updateCheckOnly, "check", false, "Check for updates without installing")
 }
 
 func runUpdate(cmd *cobra.Command, args []string) error {
@@ -47,7 +58,17 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	fmt.Printf("Updating from %s to %s...\n", Version, latest.TagName)
+	fmt.Printf("Current version: %s\n", Version)
+	fmt.Printf("Latest version:  %s\n", latest.TagName)
+
+	// If check-only mode, just report and exit
+	if updateCheckOnly {
+		fmt.Println("\nA new version is available!")
+		fmt.Printf("Run 'gh-inspect update' to install %s\n", latest.TagName)
+		return nil
+	}
+
+	fmt.Printf("\nUpdating to %s...\n", latest.TagName)
 
 	if err := doUpdate(latest.TagName); err != nil {
 		return err
@@ -63,7 +84,7 @@ type Release struct {
 }
 
 func getLatestRelease() (*Release, error) {
-	resp, err := http.Get("https://api.github.com/repos/mikematt33/gh-inspect/releases/latest")
+	resp, err := httpClient.Get("https://api.github.com/repos/mikematt33/gh-inspect/releases/latest")
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +229,7 @@ func doUpdate(version string) error {
 
 // downloadChecksums downloads and parses the checksums.txt file
 func downloadChecksums(url string) (map[string]string, error) {
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +258,7 @@ func downloadChecksums(url string) (map[string]string, error) {
 
 // downloadFile downloads a file from url to filepath
 func downloadFile(url, filepath string) error {
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return err
 	}

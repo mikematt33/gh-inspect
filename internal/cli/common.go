@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/mikematt33/gh-inspect/internal/analysis"
@@ -19,6 +21,18 @@ import (
 	"github.com/mikematt33/gh-inspect/pkg/models"
 )
 
+// getClientWithToken initializes a GitHub client with token resolution and validation.
+// It attempts to resolve the token from configuration, environment, or gh CLI.
+// Returns an error if no valid token is found.
+func getClientWithToken(cfg *config.Config) (*ghclient.ClientWrapper, error) {
+	token := ghclient.ResolveToken(cfg.Global.GitHubToken)
+	if token == "" {
+		return nil, fmt.Errorf("no GitHub token found. Please run 'gh-inspect auth' to login")
+	}
+	return ghclient.NewClient(token), nil
+}
+
+// AnalysisOptions contains the configuration for running repository analysis.
 type AnalysisOptions struct {
 	Repos []string
 	Since string
@@ -27,6 +41,9 @@ type AnalysisOptions struct {
 
 var pipelineRunner = RunAnalysisPipeline
 
+// RunAnalysisPipeline executes the complete analysis workflow for the specified repositories.
+// It loads configuration, sets up analyzers, runs analysis concurrently, and aggregates results.
+// The function supports context cancellation and provides progress feedback.
 func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	// 1. Load Config
 	cfg, err := config.Load()
@@ -68,7 +85,10 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 
 	// Pre-flight check for rate limits
 	limits, err := client.GetRateLimit(context.Background())
-	if err == nil {
+	if err != nil {
+		// Warning only - don't fail
+		fmt.Fprintf(os.Stderr, "⚠️  WARNING: Could not check rate limit: %v\n", err)
+	} else {
 		// Estimate cost based on scan depth
 		costPerRepo := 25 // Base estimate (commits, health, basic stats)
 		if opts.Deep {
@@ -110,6 +130,19 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 
 	start := time.Now()
 
+	// Setup context with cancellation support
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Handle interrupt signals
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Fprintln(os.Stderr, "\n⚠️  Received interrupt signal. Cancelling analysis...")
+		cancel()
+	}()
+
 	// Concurrency control
 	maxworkers := cfg.Global.Concurrency
 	if maxworkers < 1 {
@@ -119,23 +152,35 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
+	// Track progress
+	var completed int
+	totalRepos := len(opts.Repos)
+
 	// Prepare Report Struct matching models/report.go definition
 	fullReport := models.Report{
 		Meta: models.ReportMeta{
 			GeneratedAt: time.Now(),
-			CLIVersion:  "0.2.0",
+			CLIVersion:  Version,
 			Command:     "run", // This might need to be passed in or generic
 		},
 		Repositories: []models.RepoResult{},
 	}
 
-	fmt.Printf("Queueing %d repositories (concurrency: %d)...\n", len(opts.Repos), maxworkers)
+	if shouldPrintInfo() {
+		fmt.Printf("Queueing %d repositories (concurrency: %d)...\n", len(opts.Repos), maxworkers)
+	}
 
 	for _, repoArg := range opts.Repos {
 		wg.Add(1)
 		go func(arg string) {
 			defer wg.Done()
-			sem <- struct{}{}
+
+			// Check for cancellation
+			select {
+			case <-ctx.Done():
+				return
+			case sem <- struct{}{}:
+			}
 			defer func() { <-sem }()
 
 			parts := strings.Split(arg, "/")
@@ -145,7 +190,9 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 			}
 
 			owner, name := parts[0], parts[1]
-			fmt.Printf("Analyzing %s/%s...\n", owner, name)
+			if shouldPrintInfo() {
+				fmt.Printf("Analyzing %s/%s...\n", owner, name)
+			}
 
 			repoReport := models.RepoResult{
 				Name:      fmt.Sprintf("%s/%s", owner, name),
@@ -156,7 +203,14 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 			target := analysis.TargetRepository{Owner: owner, Name: name}
 
 			for _, az := range analyzers {
-				res, err := az.Analyze(context.Background(), client, target, analysisCfg)
+				// Check for cancellation before each analyzer
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				res, err := az.Analyze(ctx, client, target, analysisCfg)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Error analyzing %s with %s: %v\n", arg, az.Name(), err)
 					// Add placeholder error result
@@ -172,16 +226,28 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 
 			mu.Lock()
 			fullReport.Repositories = append(fullReport.Repositories, repoReport)
+			completed++
+			if shouldPrintInfo() {
+				fmt.Printf("✓ Completed %s/%s (%d/%d repositories)\n", owner, name, completed, totalRepos)
+			}
 			mu.Unlock()
 
 		}(repoArg)
 	}
 
 	wg.Wait()
+
+	// Check if analysis was cancelled
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("analysis cancelled by user")
+	default:
+	}
+
 	durationScan := time.Since(start)
 	fullReport.Meta.Duration = durationScan.String()
 
-	// Calculate Global Summary
+	// Calculate Global Summary in a single pass
 	fullReport.Summary.TotalReposAnalyzed = len(fullReport.Repositories)
 
 	var sumHealth, sumCISuccess, sumPRCycle float64
@@ -189,6 +255,8 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 
 	for _, r := range fullReport.Repositories {
 		for _, az := range r.Analyzers {
+			fullReport.Summary.IssuesFound += len(az.Findings)
+
 			for _, m := range az.Metrics {
 				switch m.Key {
 				case "commits_total":
@@ -215,7 +283,6 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 					countPRCycle++
 				}
 			}
-			fullReport.Summary.IssuesFound += len(az.Findings)
 		}
 	}
 

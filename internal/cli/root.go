@@ -40,12 +40,42 @@ This command performs a deep dive into the specified repositories, gathering met
 
 // Flags
 var (
-	flagFormat string
-	flagSince  string
-	flagDeep   bool
-	flagFail   int
+	flagFormat  string
+	flagSince   string
+	flagDeep    bool
+	flagFail    int
+	flagQuiet   bool
+	flagVerbose bool
 )
 
+// registerAnalysisFlags adds common analysis flags to a command
+func registerAnalysisFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&flagFormat, "format", "f", "text", "Output format (text, json)")
+	cmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"text", "json"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	cmd.Flags().StringVarP(&flagSince, "since", "s", "30d", "Lookback window (e.g. 30d, 24h)")
+	cmd.RegisterFlagCompletionFunc("since", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"30d", "90d", "180d", "24h", "720h"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	cmd.Flags().BoolVarP(&flagDeep, "deep", "d", false, "Enable deep scanning (warning: consumes more API rate limit)")
+	cmd.Flags().IntVar(&flagFail, "fail-under", 0, "Exit with error code 1 if average health score is below this value")
+}
+
+// shouldPrintInfo returns true if informational messages should be printed (not in quiet mode)
+func shouldPrintInfo() bool {
+	return !flagQuiet
+}
+
+// shouldPrintVerbose returns true if verbose messages should be printed
+func shouldPrintVerbose() bool {
+	return flagVerbose && !flagQuiet
+}
+
+// Execute runs the root command and handles CLI execution.
+// This is the main entry point for the gh-inspect CLI application.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -67,42 +97,32 @@ func checkAndInitConfig(cmd *cobra.Command, args []string) {
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		// Auto-initialize default config when missing for commands other than auth/init/config.
-		fmt.Printf("ℹ️  Config not found at %s. Initializing default configuration...\n", configPath)
+		if shouldPrintInfo() {
+			fmt.Printf("ℹ️  Config not found at %s. Initializing default configuration...\n", configPath)
+		}
 		if err := createDefaultConfig(configPath); err != nil {
-			fmt.Printf("⚠️  Failed to auto-create config: %v\n", err)
+			if shouldPrintInfo() {
+				fmt.Printf("⚠️  Failed to auto-create config: %v\n", err)
+			}
 		} else {
-			fmt.Println("✅ Config created.")
+			if shouldPrintInfo() {
+				fmt.Println("✅ Config created.")
+			}
 		}
 	}
 }
 
 func init() {
+	// Add global flags
+	rootCmd.PersistentFlags().BoolVarP(&flagQuiet, "quiet", "q", false, "Suppress non-essential output")
+	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "Enable verbose output")
+
 	rootCmd.AddCommand(runCmd)
-	runCmd.Flags().StringVarP(&flagFormat, "format", "f", "text", "Output format (text, json)")
-	runCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{"text", "json"}, cobra.ShellCompDirectiveNoFileComp
-	})
-
-	runCmd.Flags().StringVarP(&flagSince, "since", "s", "30d", "Lookback window (e.g. 30d, 24h)")
-	runCmd.RegisterFlagCompletionFunc("since", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{"30d", "90d", "180d", "24h", "720h"}, cobra.ShellCompDirectiveNoFileComp
-	})
-
-	runCmd.Flags().BoolVarP(&flagDeep, "deep", "d", false, "Enable deep scanning (warning: consumes more API rate limit)")
-	runCmd.Flags().IntVar(&flagFail, "fail-under", 0, "Exit with error code 1 if average health score is below this value")
+	registerAnalysisFlags(runCmd)
 
 	// Register compare command
 	rootCmd.AddCommand(compareCmd)
-	compareCmd.Flags().StringVarP(&flagFormat, "format", "f", "text", "Output format (text, json)")
-	compareCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{"text", "json"}, cobra.ShellCompDirectiveNoFileComp
-	})
-
-	compareCmd.Flags().StringVarP(&flagSince, "since", "s", "30d", "Lookback window (e.g. 30d, 24h)")
-	compareCmd.RegisterFlagCompletionFunc("since", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{"30d", "90d", "180d", "24h", "720h"}, cobra.ShellCompDirectiveNoFileComp
-	})
-	compareCmd.Flags().BoolVarP(&flagDeep, "deep", "d", false, "Enable deep scanning (warning: consumes more API rate limit)")
+	registerAnalysisFlags(compareCmd)
 }
 
 func runAnalysis(cmd *cobra.Command, args []string) {
