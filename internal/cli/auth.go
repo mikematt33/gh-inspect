@@ -149,7 +149,7 @@ func saveToken(token string) {
 		fmt.Printf("❌ Failed to save config: %v\n", err)
 		return
 	}
-	
+
 	fmt.Println("✅ Token saved successfully to configuration.")
 }
 
