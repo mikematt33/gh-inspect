@@ -166,7 +166,7 @@ func promptYesNo(question string) bool {
 
 // isValidToken checks if a token string is valid (non-empty and has expected format).
 func isValidToken(token string) bool {
-	// GitHub tokens are typically 20+ characters
-	// Basic validation: not empty and has reasonable length
+	// GitHub tokens vary in format and length (e.g., classic PATs are 40 chars with ghp_ prefix,
+	// fine-grained PATs start with github_pat_). This performs basic validation for minimum length.
 	return len(token) >= 20
 }
