@@ -176,12 +176,12 @@ func TestUninstallExecutablePathError(t *testing.T) {
 	// This test verifies error handling when os.Executable() might fail
 	// In practice, os.Executable() rarely fails in normal circumstances,
 	// but we should still handle the error properly
-	
+
 	// We can't easily simulate os.Executable() failure without mocking,
 	// but we can at least verify the error message format would be correct
 	testErr := fmt.Errorf("mock executable path error")
 	wrappedErr := fmt.Errorf("failed to determine executable path: %w", testErr)
-	
+
 	if !strings.Contains(wrappedErr.Error(), "failed to determine executable path") {
 		t.Errorf("Expected error message to contain 'failed to determine executable path', got: %v", wrappedErr)
 	}

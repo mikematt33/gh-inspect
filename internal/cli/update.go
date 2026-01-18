@@ -175,7 +175,7 @@ func doUpdate(version string) error {
 	if err != nil {
 		return fmt.Errorf("failed to locate executable: %w", err)
 	}
-	
+
 	realPath, err := filepath.EvalSymlinks(exe)
 	if err == nil {
 		exe = realPath

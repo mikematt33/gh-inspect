@@ -44,7 +44,7 @@ func TestCompareCmd(t *testing.T) {
 	var buf bytes.Buffer
 	io.Copy(&buf, r)
 	output := buf.String()
-	
+
 	// Basic check that something was produced
 	if output == "" {
 		// report.ComparisonTextRenderer might write something

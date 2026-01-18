@@ -18,7 +18,7 @@ import (
 
 func TestDownloadChecksums(t *testing.T) {
 	checksumContent := "abc123  file1.tar.gz\ndef456  file2.tar.gz\n"
-	
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, checksumContent)
 	}))
@@ -44,7 +44,7 @@ func TestDownloadChecksums(t *testing.T) {
 
 func TestDownloadFile(t *testing.T) {
 	content := "test file content"
-	
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, content)
 	}))
@@ -74,7 +74,7 @@ func TestDownloadFile(t *testing.T) {
 
 func TestCalculateSHA256(t *testing.T) {
 	content := "test content for checksum"
-	
+
 	tmpDir, err := os.MkdirTemp("", "test-checksum")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -112,7 +112,7 @@ func TestExtractFromTarGz(t *testing.T) {
 	// Create a tar.gz archive with a test file
 	archivePath := filepath.Join(tmpDir, "test.tar.gz")
 	content := []byte("test binary content")
-	
+
 	f, err := os.Create(archivePath)
 	if err != nil {
 		t.Fatalf("Failed to create archive file: %v", err)
@@ -126,11 +126,11 @@ func TestExtractFromTarGz(t *testing.T) {
 		Mode: 0755,
 		Size: int64(len(content)),
 	}
-	
+
 	if err := tw.WriteHeader(header); err != nil {
 		t.Fatalf("Failed to write tar header: %v", err)
 	}
-	
+
 	if _, err := tw.Write(content); err != nil {
 		t.Fatalf("Failed to write tar content: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestExtractFromTarGzNotFound(t *testing.T) {
 	// Create a tar.gz archive with a different file
 	archivePath := filepath.Join(tmpDir, "test.tar.gz")
 	content := []byte("test binary content")
-	
+
 	f, err := os.Create(archivePath)
 	if err != nil {
 		t.Fatalf("Failed to create archive file: %v", err)
@@ -174,11 +174,11 @@ func TestExtractFromTarGzNotFound(t *testing.T) {
 		Mode: 0755,
 		Size: int64(len(content)),
 	}
-	
+
 	if err := tw.WriteHeader(header); err != nil {
 		t.Fatalf("Failed to write tar header: %v", err)
 	}
-	
+
 	if _, err := tw.Write(content); err != nil {
 		t.Fatalf("Failed to write tar content: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestExtractFromZip(t *testing.T) {
 	// Create a zip archive with a test file
 	archivePath := filepath.Join(tmpDir, "test.zip")
 	content := []byte("test binary content")
-	
+
 	f, err := os.Create(archivePath)
 	if err != nil {
 		t.Fatalf("Failed to create archive file: %v", err)
@@ -220,7 +220,7 @@ func TestExtractFromZip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create file in zip: %v", err)
 	}
-	
+
 	if _, err := fw.Write(content); err != nil {
 		t.Fatalf("Failed to write content to zip: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestExtractFromZipNotFound(t *testing.T) {
 	// Create a zip archive with a different file
 	archivePath := filepath.Join(tmpDir, "test.zip")
 	content := []byte("test binary content")
-	
+
 	f, err := os.Create(archivePath)
 	if err != nil {
 		t.Fatalf("Failed to create archive file: %v", err)
@@ -261,7 +261,7 @@ func TestExtractFromZipNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create file in zip: %v", err)
 	}
-	
+
 	if _, err := fw.Write(content); err != nil {
 		t.Fatalf("Failed to write content to zip: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestExtractFromZipNotFound(t *testing.T) {
 
 func TestGetLatestRelease(t *testing.T) {
 	releaseJSON := `{"tag_name": "v1.2.3"}`
-	
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, releaseJSON)
 	}))
@@ -305,13 +305,13 @@ func TestGetLatestRelease(t *testing.T) {
 		t.Error("Expected response data, got empty")
 	}
 
-	_ = rel // Use the variable to avoid unused error
+	_ = rel // Use the variable to avoid unused variable warning
 }
 
 func TestDoUpdateUnsupportedOS(t *testing.T) {
 	// This test verifies error messages are properly formatted
 	// We can't easily test the full update flow without network access
-	
+
 	// Test will fail on unsupported OS/arch combinations or network issues
 	// This is mainly to ensure the function doesn't panic
 	err := doUpdate("v999.999.999")
