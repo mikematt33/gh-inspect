@@ -102,8 +102,6 @@ func runAutoCompletion() {
 	switch shellName {
 	case "bash":
 		targetFile = filepath.Join(home, ".bashrc")
-		// Check for .bash_profile on Mac if .bashrc doesn't exist? 
-		// Simplicity: default to .bashrc for Linux (user's OS)
 		commandToAppend = "source <(gh-inspect completion bash)"
 	case "zsh":
 		targetFile = filepath.Join(home, ".zshrc")
@@ -122,22 +120,31 @@ func runAutoCompletion() {
 		return
 	}
 
-	// Check if file exists
-	f, err := os.OpenFile(targetFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Printf("❌ Failed to open file: %v\n", err)
+	// Read file content first to check for duplicates
+	content, err := os.ReadFile(targetFile)
+	if err != nil && !os.IsNotExist(err) {
+		fmt.Printf("❌ Failed to read file: %v\n", err)
 		return
 	}
-	defer f.Close()
 
-	// Check if already present (naive check)
-	content, _ := os.ReadFile(targetFile)
 	if strings.Contains(string(content), "gh-inspect completion") {
 		fmt.Println("⚠️  It looks like gh-inspect completion is already configured in this file.")
 		if !promptYesNo("Append anyway?") {
 			return
 		}
 	}
+
+	// Now open file for appending
+	f, err := os.OpenFile(targetFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("❌ Failed to open file: %v\n", err)
+		return
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Printf("❌ Failed to close file: %v\n", err)
+		}
+	}()
 
 	if _, err := f.WriteString(fmt.Sprintf("\n# gh-inspect completion\n%s\n", commandToAppend)); err != nil {
 		fmt.Printf("❌ Failed to write to file: %v\n", err)

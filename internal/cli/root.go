@@ -66,10 +66,7 @@ func checkAndInitConfig(cmd *cobra.Command, args []string) {
 	}
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		// Only auto-initialize if we aren't running 'auth', but we already skipped 'auth' above.
-		// However, users might want to configure first?
-		// Actually, the previous logic was: if you run 'run', 'org', etc., it auto-creates config.
-		// That is still valid behavior.
+		// Auto-initialize default config when missing for commands other than auth/init/config.
 		fmt.Printf("ℹ️  Config not found at %s. Initializing default configuration...\n", configPath)
 		if err := createDefaultConfig(configPath); err != nil {
 			fmt.Printf("⚠️  Failed to auto-create config: %v\n", err)
@@ -106,12 +103,6 @@ func init() {
 		return []string{"30d", "90d", "180d", "24h", "720h"}, cobra.ShellCompDirectiveNoFileComp
 	})
 	compareCmd.Flags().BoolVarP(&flagDeep, "deep", "d", false, "Enable deep scanning (warning: consumes more API rate limit)")
-
-	// Register org command completions
-	// Since orgCmd is initialized in org.go after init(), we might need to be careful.
-	// However, root.go's init runs before or after? It depends on import order, but usually they run.
-	// Actually orgCmd flag registration is inside org.go init().
-	// I should update org.go and user.go separately or make similar changes there.
 }
 
 func runAnalysis(cmd *cobra.Command, args []string) {

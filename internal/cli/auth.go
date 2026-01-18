@@ -53,8 +53,16 @@ func loginWithGh() {
 	cmd := exec.Command("gh", "auth", "token")
 	if err := cmd.Run(); err == nil {
 		fmt.Println("✅ You are already logged in via GitHub CLI.")
-		tokenBytes, _ := exec.Command("gh", "auth", "token").Output()
+		tokenBytes, err := exec.Command("gh", "auth", "token").Output()
+		if err != nil {
+			fmt.Printf("❌ Failed to retrieve token: %v\n", err)
+			return
+		}
 		token := strings.TrimSpace(string(tokenBytes))
+		if !isValidToken(token) {
+			fmt.Println("❌ Retrieved token is invalid or empty.")
+			return
+		}
 		saveToken(token)
 		return
 	}
@@ -80,7 +88,13 @@ func loginWithGh() {
 		return
 	}
 
-	saveToken(strings.TrimSpace(string(tokenBytes)))
+	token := strings.TrimSpace(string(tokenBytes))
+	if !isValidToken(token) {
+		fmt.Println("❌ Retrieved token is invalid or empty.")
+		return
+	}
+
+	saveToken(token)
 }
 
 func loginWithToken() {
@@ -93,8 +107,17 @@ func loginWithToken() {
 		fmt.Println("\n❌ Failed to read token.")
 		// Fallback to simple read if term fails (e.g. windows mintty sometimes)
 		reader := bufio.NewReader(os.Stdin)
-		tokenStr, _ := reader.ReadString('\n')
-		saveToken(strings.TrimSpace(tokenStr))
+		tokenStr, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Println("❌ Failed to read token from standard input.")
+			return
+		}
+		tokenStr = strings.TrimSpace(tokenStr)
+		if tokenStr == "" {
+			fmt.Println("❌ Empty token provided.")
+			return
+		}
+		saveToken(tokenStr)
 		return
 	}
 	token := strings.TrimSpace(string(byteToken))
@@ -126,7 +149,6 @@ func saveToken(token string) {
 		fmt.Printf("❌ Failed to save config: %v\n", err)
 		return
 	}
-	// Also implicitly init config if it didn't exist? saveConfig does MkdirAll.
 	
 	fmt.Println("✅ Token saved successfully to configuration.")
 }
@@ -134,7 +156,17 @@ func saveToken(token string) {
 func promptYesNo(question string) bool {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Printf("%s [Y/n]: ", question)
-	text, _ := reader.ReadString('\n')
+	text, err := reader.ReadString('\n')
+	if err != nil {
+		return false
+	}
 	text = strings.TrimSpace(strings.ToLower(text))
 	return text == "" || text == "y" || text == "yes"
+}
+
+// isValidToken checks if a token string is valid (non-empty and has expected format).
+func isValidToken(token string) bool {
+	// GitHub tokens are typically 40+ characters
+	// Basic validation: not empty and has reasonable length
+	return len(token) >= 20
 }
