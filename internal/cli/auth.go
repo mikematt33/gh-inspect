@@ -166,7 +166,7 @@ func promptYesNo(question string) bool {
 
 // isValidToken checks if a token string is valid (non-empty and has expected format).
 func isValidToken(token string) bool {
-	// GitHub tokens are typically 40+ characters
+	// GitHub tokens are typically 20+ characters
 	// Basic validation: not empty and has reasonable length
 	return len(token) >= 20
 }
