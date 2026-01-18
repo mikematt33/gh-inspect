@@ -15,6 +15,11 @@ import (
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage configuration",
+	Long: `Manage the gh-inspect configuration file.
+The configuration file is typically located at:
+- Linux: ~/.config/gh-inspect/config.yaml
+- macOS: ~/Library/Application Support/gh-inspect/config.yaml
+- Windows: %APPDATA%\gh-inspect\config.yaml`,
 }
 
 var setTokenCmd = &cobra.Command{

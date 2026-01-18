@@ -54,8 +54,9 @@ analyzers:
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Generate a default configuration file",
-	Long:  `Creates a config.yaml file in the current directory with default settings.`,
-	Run:   runInit,
+	Long: `Creates a default configuration file (config.yaml) in your user configuration directory if it doesn't exist.
+Use this to customize analysis thresholds, enable/disable specific analyzers, and set global defaults.`,
+	Run: runInit,
 }
 
 func init() {

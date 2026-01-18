@@ -17,7 +17,9 @@ import (
 var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update gh-inspect to the latest version",
-	RunE:  runUpdate,
+	Long: `Download and install the latest release of gh-inspect from GitHub.
+This command replaces the current binary with the latest version available.`,
+	RunE: runUpdate,
 }
 
 func init() {

@@ -15,8 +15,12 @@ import (
 var userCmd = &cobra.Command{
 	Use:   "user [username]",
 	Short: "Analyze all repositories of a user",
-	Args:  cobra.ExactArgs(1),
-	Run:   runUserAnalysis,
+	Long: `Scan all active public repositories belonging to a specific GitHub user.
+Useful for personal portfolio reviews or analyzing open source contributions.`,
+	Example: `  gh-inspect user octocat
+  gh-inspect user octocat --deep`,
+	Args: cobra.ExactArgs(1),
+	Run:  runUserAnalysis,
 }
 
 var getUserRepositories = func(username string) ([]*github.Repository, error) {

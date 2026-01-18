@@ -41,9 +41,12 @@ var getOrgRepositories = func(orgName string) ([]*github.Repository, error) {
 var orgCmd = &cobra.Command{
 	Use:   "org [organization]",
 	Short: "Analyze an entire GitHub organization",
-	Long:  "Scan all repositories in a GitHub organization. Automatically skips archived repositories.",
-	Args:  cobra.ExactArgs(1),
-	Run:   runOrgAnalysis,
+	Long:  `Scan all active repositories in a GitHub organization.
+Automatically fetches all repositories, filters out archived ones, and runs the health analysis on each.`,
+	Example: `  gh-inspect org my-org
+  gh-inspect org my-org --fail-under=80`,
+	Args: cobra.ExactArgs(1),
+	Run:  runOrgAnalysis,
 }
 
 func init() {

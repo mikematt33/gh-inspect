@@ -11,8 +11,10 @@ import (
 var uninstallCmd = &cobra.Command{
 	Use:   "uninstall",
 	Short: "Uninstall the gh-inspect CLI",
-	Long:  `Removes the gh-inspect binary from the system.`,
-	RunE:  runUninstall,
+	Long: `Removes the gh-inspect binary from the system.
+This command attempts to locate the binary and remove it. It does not remove configuration files.`,
+	Example: "  gh-inspect uninstall",
+	RunE:    runUninstall,
 }
 
 func init() {

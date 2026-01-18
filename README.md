@@ -75,7 +75,82 @@ make build
 
 ## ⚙️ Usage Details
 
-### Common Commands
+### Available Commands
+
+#### `run` - Analyze Repositories
+
+Analyze one or more repositories (format: owner/repo).
+
+```bash
+gh-inspect run owner/repo [flags]
+```
+
+**Flags:**
+
+- `-d, --deep`: Enable deep scanning (paginated issues/PRs).
+- `-f, --format string`: Output format (text, json) (default "text").
+- `-s, --since string`: Lookback window (e.g. 30d, 24h) (default "30d").
+- `--fail-under int`: Exit with error code 1 if average health score is below this value.
+
+#### `org` - Organization Scan
+
+Scan all active repositories in a GitHub organization. Automatically skips archived repositories.
+
+```bash
+gh-inspect org organization [flags]
+```
+
+**Flags:**
+
+- Uses the same flags as `run` (`--deep`, `--format`, `--since`, `--fail-under`).
+
+#### `user` - User Scan
+
+Analyze all repositories belonging to a specific user.
+
+```bash
+gh-inspect user username [flags]
+```
+
+**Flags:**
+
+- Uses the same flags as `run` (`--deep`, `--format`, `--since`, `--fail-under`).
+
+#### `compare` - Compare Repositories
+
+Compare metrics of multiple repositories side-by-side. Useful for benchmarking.
+
+```bash
+gh-inspect compare owner/repo1 owner/repo2 [flags]
+```
+
+**Flags:**
+
+- `-d, --deep`: Enable deep scanning.
+- `-f, --format string`: Output format (text, json).
+- `-s, --since string`: Lookback window.
+
+#### `update`
+
+Update `gh-inspect` to the latest version.
+
+```bash
+gh-inspect update
+```
+
+#### `uninstall`
+
+Uninstall the CLI from your system.
+
+```bash
+gh-inspect uninstall
+```
+
+#### `init` & `config`
+
+Initialize or manage configuration. See [Configuration](#%EF%B8%8F-configuration) for details.
+
+### Examples
 
 **Deep Scan (Last 90 days)**
 Performs a more intensive scan, including issue pagination and deep metrics.
