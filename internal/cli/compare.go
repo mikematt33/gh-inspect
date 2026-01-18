@@ -9,12 +9,14 @@ import (
 )
 
 var compareCmd = &cobra.Command{
-	Use:     "compare [repos...]",
-	Short:   "Compare multiple repositories side-by-side",
-	Long:    "Run analysis on multiple repositories and display metrics in a comparison table.",
-	Example: "gh-inspect compare kubernetes/kubernetes prometheus/prometheus",
-	Args:    cobra.MinimumNArgs(2),
-	Run:     runComparison,
+	Use:   "compare [repos...]",
+	Short: "Compare multiple repositories side-by-side",
+	Long: `Run analysis on multiple repositories and display metrics in a comparison table.
+Useful for benchmarking internal projects against each other or comparing against open source standards.`,
+	Example: `  gh-inspect compare owner/repo1 owner/repo2
+  gh-inspect compare owner/repo1 owner/repo2 owner/repo3 --since=90d`,
+	Args: cobra.MinimumNArgs(2),
+	Run:  runComparison,
 }
 
 func runComparison(cmd *cobra.Command, args []string) {

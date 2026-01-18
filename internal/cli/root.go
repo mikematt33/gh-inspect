@@ -14,8 +14,10 @@ var Version = "dev"
 
 var (
 	rootCmd = &cobra.Command{
-		Use:              "gh-inspect",
-		Short:            "GitHub Repository Deep Inspection Tool",
+		Use:   "gh-inspect",
+		Short: "GitHub Repository Deep Inspection Tool",
+		Long: `gh-inspect is a CLI tool for comprehensive engineering health analysis of GitHub repositories.
+It measures commit patterns, PR velocity, issue hygiene, CI stability, and more to provide a holistic health score.`,
 		Version:          Version,
 		PersistentPreRun: checkAndInitConfig,
 	}
@@ -23,8 +25,13 @@ var (
 	runCmd = &cobra.Command{
 		Use:   "run [repos...]",
 		Short: "Run analysis on one or more repositories (format: owner/repo)",
-		Args:  cobra.MinimumNArgs(1),
-		Run:   runAnalysis,
+		Long: `Analyze one or more GitHub repositories.
+This command performs a deep dive into the specified repositories, gathering metrics on activity, pull requests, issues, and CI workflows.`,
+		Example: `  gh-inspect run owner/repo
+  gh-inspect run owner/repo1 owner/repo2 --deep
+  gh-inspect run owner/repo --format=json > report.json`,
+		Args: cobra.MinimumNArgs(1),
+		Run:  runAnalysis,
 	}
 )
 

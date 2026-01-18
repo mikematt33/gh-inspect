@@ -13,6 +13,19 @@ BINARY="gh-inspect"
 FORMAT="tar.gz"
 BINDIR=${BINDIR:-"/usr/local/bin"}
 
+# Parse arguments
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -v|--version)
+      VERSION="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
 # Detect OS and Arch
 OS=$(uname -s)
 ARCH=$(uname -m)
