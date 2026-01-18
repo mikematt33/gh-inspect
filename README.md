@@ -25,6 +25,12 @@ You can install the latest version directly from GitHub using curl:
 curl -sfL https://raw.githubusercontent.com/mikematt33/gh-inspect/main/install.sh | sh
 ```
 
+To install a specific version (e.g., v0.1.0):
+
+```bash
+curl -sfL https://raw.githubusercontent.com/mikematt33/gh-inspect/main/install.sh | sh -s -- -v v0.1.0
+```
+
 ### Build from Source
 
 Requirements: Go 1.21+
