@@ -19,6 +19,7 @@ import (
 	"github.com/mikematt33/gh-inspect/internal/config"
 	ghclient "github.com/mikematt33/gh-inspect/internal/github"
 	"github.com/mikematt33/gh-inspect/pkg/models"
+	"github.com/schollz/progressbar/v3"
 )
 
 // getClientWithToken initializes a GitHub client with token resolution and validation.
@@ -156,6 +157,22 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	var completed int
 	totalRepos := len(opts.Repos)
 
+	// Create progress bar if not in quiet mode
+	var bar *progressbar.ProgressBar
+	if shouldPrintInfo() && !flagQuiet {
+		bar = progressbar.NewOptions(totalRepos,
+			progressbar.OptionSetDescription("Analyzing repositories"),
+			progressbar.OptionSetWidth(40),
+			progressbar.OptionShowCount(),
+			progressbar.OptionShowIts(),
+			progressbar.OptionSetItsString("repos"),
+			progressbar.OptionThrottle(100*time.Millisecond),
+			progressbar.OptionOnCompletion(func() {
+				fmt.Println()
+			}),
+		)
+	}
+
 	// Prepare Report Struct matching models/report.go definition
 	fullReport := models.Report{
 		Meta: models.ReportMeta{
@@ -190,7 +207,7 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 			}
 
 			owner, name := parts[0], parts[1]
-			if shouldPrintInfo() {
+			if shouldPrintVerbose() {
 				fmt.Printf("Analyzing %s/%s...\n", owner, name)
 			}
 
@@ -227,7 +244,9 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 			mu.Lock()
 			fullReport.Repositories = append(fullReport.Repositories, repoReport)
 			completed++
-			if shouldPrintInfo() {
+			if bar != nil {
+				bar.Add(1)
+			} else if shouldPrintVerbose() {
 				fmt.Printf("✓ Completed %s/%s (%d/%d repositories)\n", owner, name, completed, totalRepos)
 			}
 			mu.Unlock()
@@ -236,6 +255,11 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	}
 
 	wg.Wait()
+
+	// Finish progress bar
+	if bar != nil {
+		bar.Finish()
+	}
 
 	// Check if analysis was cancelled
 	select {

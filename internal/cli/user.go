@@ -15,9 +15,12 @@ var userCmd = &cobra.Command{
 	Use:   "user [username]",
 	Short: "Analyze all repositories of a user",
 	Long: `Scan all active public repositories belonging to a specific GitHub user.
-Useful for personal portfolio reviews or analyzing open source contributions.`,
+Useful for personal portfolio reviews or analyzing open source contributions.
+
+Displays a progress bar during analysis. Use --quiet for CI/CD environments.`,
 	Example: `  gh-inspect user octocat
-  gh-inspect user octocat --deep`,
+  gh-inspect user octocat --deep
+  gh-inspect user octocat --quiet --format=json`,
 	Args: cobra.ExactArgs(1),
 	Run:  runUserAnalysis,
 }
@@ -43,7 +46,9 @@ func init() {
 
 func runUserAnalysis(cmd *cobra.Command, args []string) {
 	username := args[0]
-	fmt.Printf("Fetching repositories for user '%s'...\n", username)
+	if shouldPrintInfo() {
+		fmt.Printf("Fetching repositories for user '%s'...\n", username)
+	}
 
 	repos, err := getUserRepositories(username)
 	if err != nil {
@@ -66,8 +71,10 @@ func runUserAnalysis(cmd *cobra.Command, args []string) {
 		targetRepos = append(targetRepos, r.GetFullName())
 	}
 
-	fmt.Printf("found %d total repositories\n", len(repos))
-	fmt.Printf("analyzing %d active repositories (%d archived, %d forks included)\n", len(targetRepos), archivedCount, forkCount)
+	if shouldPrintInfo() {
+		fmt.Printf("found %d total repositories\n", len(repos))
+		fmt.Printf("analyzing %d active repositories (%d archived, %d forks included)\n", len(targetRepos), archivedCount, forkCount)
+	}
 
 	if len(targetRepos) == 0 {
 		fmt.Println("No active repositories found to analyze.")

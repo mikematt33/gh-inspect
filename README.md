@@ -76,7 +76,13 @@ make build
 Log in to GitHub to access private repos and increase rate limits.
 
 ```bash
+# Interactive login (default)
 gh-inspect auth
+
+# Or use subcommands
+gh-inspect auth login   # Log in
+gh-inspect auth status  # Check authentication status
+gh-inspect auth logout  # Remove stored token
 ```
 
 #### `run` - Analyze Repositories
@@ -93,6 +99,11 @@ gh-inspect run owner/repo [flags]
 - `-f, --format string`: Output format (text, json) (default "text").
 - `-s, --since string`: Lookback window (e.g. 30d, 24h) (default "30d").
 - `--fail-under int`: Exit with error code 1 if average health score is below this value.
+
+**Global Flags:**
+
+- `-q, --quiet`: Suppress non-essential output (useful for CI/CD).
+- `-v, --verbose`: Enable verbose output with detailed progress information.
 
 #### `org` - Organization Scan
 
@@ -137,7 +148,11 @@ gh-inspect compare owner/repo1 owner/repo2 [flags]
 Update `gh-inspect` to the latest version.
 
 ```bash
+# Update to the latest version
 gh-inspect update
+
+# Check for updates without installing
+gh-inspect update --check
 ```
 
 #### `uninstall`
@@ -190,6 +205,20 @@ Fail the command (exit code 1) if the health score is below 80. Perfect for CI p
 
 ```bash
 gh-inspect run owner/repo --fail-under=80
+```
+
+**Quiet Mode for CI/CD**
+Suppress progress output for cleaner CI logs.
+
+```bash
+gh-inspect run owner/repo --quiet --format=json > report.json
+```
+
+**Verbose Mode**
+Get detailed progress information during long-running analyses.
+
+```bash
+gh-inspect run owner/org --verbose
 ```
 
 ## ⚙️ Configuration

@@ -28,11 +28,15 @@ It measures commit patterns, PR velocity, issue hygiene, CI stability, and more 
 	runCmd = &cobra.Command{
 		Use:   "run [repos...]",
 		Short: "Run analysis on one or more repositories (format: owner/repo)",
-		Long: `Analyze one or more GitHub repositories.
-This command performs a deep dive into the specified repositories, gathering metrics on activity, pull requests, issues, and CI workflows.`,
+		Long: `Analyze one or more GitHub repositories with concurrent execution.
+This command performs a deep dive into the specified repositories, gathering metrics on activity, pull requests, issues, and CI workflows.
+
+The analysis runs concurrently for better performance and displays a progress bar.
+Use --quiet to suppress progress output or --verbose for detailed information.`,
 		Example: `  gh-inspect run owner/repo
   gh-inspect run owner/repo1 owner/repo2 --deep
-  gh-inspect run owner/repo --format=json > report.json`,
+  gh-inspect run owner/repo --format=json > report.json
+  gh-inspect run owner/repo --quiet --fail-under=80`,
 		Args: cobra.MinimumNArgs(1),
 		Run:  runAnalysis,
 	}

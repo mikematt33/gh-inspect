@@ -28,10 +28,13 @@ var getOrgRepositories = func(orgName string) ([]*github.Repository, error) {
 var orgCmd = &cobra.Command{
 	Use:   "org [organization]",
 	Short: "Analyze an entire GitHub organization",
-	Long: `Scan all active repositories in a GitHub organization.
-Automatically fetches all repositories, filters out archived ones, and runs the health analysis on each.`,
+	Long: `Scan all active repositories in a GitHub organization with concurrent analysis.
+Automatically fetches all repositories, filters out archived ones, and runs the health analysis on each.
+
+Displays a progress bar during analysis. Use --quiet for CI/CD environments.`,
 	Example: `  gh-inspect org my-org
-  gh-inspect org my-org --fail-under=80`,
+  gh-inspect org my-org --fail-under=80
+  gh-inspect org my-org --quiet --format=json`,
 	Args: cobra.ExactArgs(1),
 	Run:  runOrgAnalysis,
 }
@@ -44,7 +47,9 @@ func init() {
 func runOrgAnalysis(cmd *cobra.Command, args []string) {
 	orgName := args[0]
 
-	fmt.Printf("Fetching repositories for organization '%s'...\n", orgName)
+	if shouldPrintInfo() {
+		fmt.Printf("Fetching repositories for organization '%s'...\n", orgName)
+	}
 
 	// 2. Fetch all repos
 	// We pass nil options to trigger auto-pagination in our client wrapper
@@ -70,8 +75,10 @@ func runOrgAnalysis(cmd *cobra.Command, args []string) {
 		targetRepos = append(targetRepos, r.GetFullName())
 	}
 
-	fmt.Printf("found %d total repositories\n", len(repos))
-	fmt.Printf("analyzing %d active repositories (%d archived, %d forks included)\n", len(targetRepos), archivedCount, forkCount)
+	if shouldPrintInfo() {
+		fmt.Printf("found %d total repositories\n", len(repos))
+		fmt.Printf("analyzing %d active repositories (%d archived, %d forks included)\n", len(targetRepos), archivedCount, forkCount)
+	}
 
 	if len(targetRepos) == 0 {
 		fmt.Println("No active repositories found to analyze.")
