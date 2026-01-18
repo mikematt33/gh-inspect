@@ -1,0 +1,233 @@
+package cli
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/mikematt33/gh-inspect/internal/analysis"
+	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/activity"
+	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/ci"
+	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/issuehygiene"
+	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/prflow"
+	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/repohealth"
+	"github.com/mikematt33/gh-inspect/internal/config"
+	ghclient "github.com/mikematt33/gh-inspect/internal/github"
+	"github.com/mikematt33/gh-inspect/pkg/models"
+)
+
+type AnalysisOptions struct {
+	Repos []string
+	Since string
+	Deep  bool
+}
+
+var pipelineRunner = RunAnalysisPipeline
+
+func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
+	// 1. Load Config
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("error loading config: %w", err)
+	}
+
+	// 2. Parse Time Window
+	var duration time.Duration
+
+	if strings.HasSuffix(opts.Since, "d") {
+		daysStr := strings.TrimSuffix(opts.Since, "d")
+		var days int
+		_, scanErr := fmt.Sscanf(daysStr, "%d", &days)
+		if scanErr != nil {
+			err = scanErr
+		} else {
+			duration = time.Duration(days) * 24 * time.Hour
+		}
+	} else {
+		duration, err = time.ParseDuration(opts.Since)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("invalid time duration format: %s. Use '30d' or '720h'", opts.Since)
+	}
+
+	analysisCfg := analysis.Config{
+		Since:       time.Now().Add(-duration),
+		IncludeDeep: opts.Deep,
+	}
+
+	// 3. Setup Dependencies
+	token := ghclient.ResolveToken(cfg.Global.GitHubToken)
+	if token == "" {
+		return nil, fmt.Errorf("error: No GitHub token found. Please set GITHUB_TOKEN, run 'gh auth login', or set it in config")
+	}
+	client := ghclient.NewClient(token)
+
+	// Pre-flight check for rate limits
+	limits, err := client.GetRateLimit(context.Background())
+	if err == nil {
+		// Estimate cost based on scan depth
+		costPerRepo := 25 // Base estimate (commits, health, basic stats)
+		if opts.Deep {
+			costPerRepo = 150 // Deep scan includes issue pagination, reviews, etc.
+		}
+
+		totalCost := costPerRepo * len(opts.Repos)
+		if limits.Remaining < totalCost {
+			fmt.Fprintf(os.Stderr, "⚠️  WARNING: Analysis may exhaust rate limit. Estimated ~%d requests needed, %d remaining.\n", totalCost, limits.Remaining)
+			fmt.Fprintf(os.Stderr, "   Proceeding anyway in 2 seconds (Ctrl+C to cancel)...\n")
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	// Setup Analyzer Registry
+	var analyzers []analysis.Analyzer
+
+	// Always add Activity (Tier 1)
+	analyzers = append(analyzers, activity.New())
+
+	if cfg.Analyzers.PRFlow.Enabled {
+		analyzers = append(analyzers, prflow.New(cfg.Analyzers.PRFlow.Params.StaleThresholdDays))
+	}
+
+	if cfg.Analyzers.RepoHealth.Enabled {
+		analyzers = append(analyzers, repohealth.New())
+	}
+
+	if cfg.Analyzers.IssueHygiene.Enabled {
+		analyzers = append(analyzers, issuehygiene.New(
+			cfg.Analyzers.IssueHygiene.Params.StaleThresholdDays,
+			cfg.Analyzers.IssueHygiene.Params.ZombieThresholdDays,
+		))
+	}
+
+	if cfg.Analyzers.CI.Enabled {
+		analyzers = append(analyzers, ci.New())
+	}
+
+	start := time.Now()
+
+	// Concurrency control
+	maxworkers := cfg.Global.Concurrency
+	if maxworkers < 1 {
+		maxworkers = 1
+	}
+	sem := make(chan struct{}, maxworkers)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	// Prepare Report Struct matching models/report.go definition
+	fullReport := models.Report{
+		Meta: models.ReportMeta{
+			GeneratedAt: time.Now(),
+			CLIVersion:  "0.2.0",
+			Command:     "run", // This might need to be passed in or generic
+		},
+		Repositories: []models.RepoResult{},
+	}
+
+	fmt.Printf("Queueing %d repositories (concurrency: %d)...\n", len(opts.Repos), maxworkers)
+
+	for _, repoArg := range opts.Repos {
+		wg.Add(1)
+		go func(arg string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			parts := strings.Split(arg, "/")
+			if len(parts) != 2 {
+				fmt.Printf("Skipping invalid repo format: %s\n", arg)
+				return
+			}
+
+			owner, name := parts[0], parts[1]
+			fmt.Printf("Analyzing %s/%s...\n", owner, name)
+
+			repoReport := models.RepoResult{
+				Name:      fmt.Sprintf("%s/%s", owner, name),
+				URL:       fmt.Sprintf("https://github.com/%s/%s", owner, name),
+				Analyzers: []models.AnalyzerResult{},
+			}
+
+			target := analysis.TargetRepository{Owner: owner, Name: name}
+
+			for _, az := range analyzers {
+				res, err := az.Analyze(context.Background(), client, target, analysisCfg)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error analyzing %s with %s: %v\n", arg, az.Name(), err)
+					// Add placeholder error result
+					res.Name = az.Name()
+					res.Findings = append(res.Findings, models.Finding{
+						Type:     "analyzer_error",
+						Severity: models.SeverityHigh,
+						Message:  fmt.Sprintf("Analysis failed: %v", err),
+					})
+				}
+				repoReport.Analyzers = append(repoReport.Analyzers, res)
+			}
+
+			mu.Lock()
+			fullReport.Repositories = append(fullReport.Repositories, repoReport)
+			mu.Unlock()
+
+		}(repoArg)
+	}
+
+	wg.Wait()
+	durationScan := time.Since(start)
+	fullReport.Meta.Duration = durationScan.String()
+
+	// Calculate Global Summary
+	fullReport.Summary.TotalReposAnalyzed = len(fullReport.Repositories)
+
+	var sumHealth, sumCISuccess, sumPRCycle float64
+	var countHealth, countCI, countPRCycle int
+
+	for _, r := range fullReport.Repositories {
+		for _, az := range r.Analyzers {
+			for _, m := range az.Metrics {
+				switch m.Key {
+				case "commits_total":
+					fullReport.Summary.TotalCommits += int(m.Value)
+				case "open_issues_total":
+					fullReport.Summary.TotalOpenIssues += int(m.Value)
+				case "zombie_issues":
+					fullReport.Summary.TotalZombieIssues += int(m.Value)
+				case "health_score":
+					sumHealth += m.Value
+					countHealth++
+					if m.Value < 50.0 {
+						fullReport.Summary.ReposAtRisk++
+					}
+				case "success_rate":
+					sumCISuccess += m.Value
+					countCI++
+				case "bus_factor":
+					if m.Value == 1 {
+						fullReport.Summary.BusFactor1Repos++
+					}
+				case "avg_cycle_time_hours":
+					sumPRCycle += m.Value
+					countPRCycle++
+				}
+			}
+			fullReport.Summary.IssuesFound += len(az.Findings)
+		}
+	}
+
+	if countHealth > 0 {
+		fullReport.Summary.AvgHealthScore = sumHealth / float64(countHealth)
+	}
+	if countCI > 0 {
+		fullReport.Summary.AvgCISuccessRate = sumCISuccess / float64(countCI)
+	}
+	if countPRCycle > 0 {
+		fullReport.Summary.AvgPRCycleTime = sumPRCycle / float64(countPRCycle)
+	}
+
+	return &fullReport, nil
+}

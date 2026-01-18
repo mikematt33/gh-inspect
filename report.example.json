@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "generated_at": "2023-10-27T10:00:00Z",
+    "cli_version": "v0.1.0",
+    "command": "run --targets mikematt33/gh-inspect",
+    "duration": "1.2s"
+  },
+  "repositories": [
+    {
+      "name": "mikematt33/gh-inspect",
+      "url": "https://github.com/mikematt33/gh-inspect",
+      "analyzers": [
+        {
+          "name": "pr-flow",
+          "metrics": [
+            {
+              "key": "avg_cycle_time_hours",
+              "value": 52.5,
+              "unit": "hours",
+              "display_value": "52.5h",
+              "description": "Average time from PR open to merge"
+            },
+            {
+              "key": "merge_ratio",
+              "value": 0.85,
+              "unit": "percent",
+              "display_value": "85%",
+              "description": "Percentage of closed PRs that were merged"
+            }
+          ],
+          "findings": [
+            {
+              "type": "stale_pr",
+              "severity": "medium",
+              "message": "PR #102 has been inactive for 21 days",
+              "location": "https://github.com/mikematt33/gh-inspect/pull/102",
+              "actionable": true,
+              "remediation": "Close or Ping assignee"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_repos_analyzed": 1,
+    "issues_found": 1
+  }
+}
