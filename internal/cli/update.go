@@ -2,7 +2,11 @@ package cli
 
 import (
 	"archive/tar"
+	"archive/zip"
+	"bufio"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -45,6 +50,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Successfully updated to %s\n", latest.TagName)
+	fmt.Println("\nNote: Please restart your terminal or re-run the command to use the new version.")
 	return nil
 }
 
@@ -86,6 +92,8 @@ func doUpdate(version string) error {
 		osName = "Linux"
 	case "darwin":
 		osName = "Darwin"
+	case "windows":
+		osName = "Windows"
 	default:
 		return fmt.Errorf("unsupported OS: %s", osType)
 	}
@@ -102,8 +110,16 @@ func doUpdate(version string) error {
 		return fmt.Errorf("unsupported architecture: %s", arch)
 	}
 
-	assetName := fmt.Sprintf("%s_%s_%s.tar.gz", binary, osName, archName)
+	// Determine archive format based on OS
+	assetExt := "tar.gz"
+	if osName == "Windows" {
+		assetExt = "zip"
+	}
+
+	assetName := fmt.Sprintf("%s_%s_%s.%s", binary, osName, archName, assetExt)
+	checksumFile := "checksums.txt"
 	downloadUrl := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", owner, repo, version, assetName)
+	checksumUrl := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", owner, repo, version, checksumFile)
 
 	fmt.Printf("Downloading %s...\n", downloadUrl)
 
@@ -114,23 +130,156 @@ func doUpdate(version string) error {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Download
-	resp, err := http.Get(downloadUrl)
+	// Download checksums file
+	fmt.Println("Downloading checksums...")
+	checksums, err := downloadChecksums(checksumUrl)
 	if err != nil {
+		return fmt.Errorf("failed to download checksums: %w", err)
+	}
+
+	expectedChecksum, ok := checksums[assetName]
+	if !ok {
+		return fmt.Errorf("checksum not found for %s", assetName)
+	}
+
+	// Download archive to temp file
+	archivePath := filepath.Join(tmpDir, assetName)
+	if err := downloadFile(downloadUrl, archivePath); err != nil {
 		return fmt.Errorf("download failed: %w", err)
+	}
+
+	// Verify checksum
+	fmt.Println("Verifying checksum...")
+	actualChecksum, err := calculateSHA256(archivePath)
+	if err != nil {
+		return fmt.Errorf("failed to calculate checksum: %w", err)
+	}
+
+	if actualChecksum != expectedChecksum {
+		return fmt.Errorf("checksum mismatch: expected %s, got %s", expectedChecksum, actualChecksum)
+	}
+
+	// Extract binary from archive
+	var binaryData []byte
+	if osName == "Windows" {
+		binaryData, err = extractFromZip(archivePath, binary+".exe")
+	} else {
+		binaryData, err = extractFromTarGz(archivePath, binary)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to extract binary: %w", err)
+	}
+
+	// Locate current binary
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to locate executable: %w", err)
+	}
+
+	realPath, err := filepath.EvalSymlinks(exe)
+	if err == nil {
+		exe = realPath
+	}
+
+	// Write new binary to a temp file first (in the same directory to allow atomic move)
+	installDir := filepath.Dir(exe)
+	tempDst := filepath.Join(installDir, fmt.Sprintf(".%s.new", filepath.Base(exe)))
+
+	err = os.WriteFile(tempDst, binaryData, 0755)
+	if err != nil {
+		if os.IsPermission(err) {
+			return fmt.Errorf("permission denied writing to %s: please run with sudo", installDir)
+		}
+		return fmt.Errorf("failed to create new binary file: %w", err)
+	}
+
+	// Atomic rename (replace)
+	if err := os.Rename(tempDst, exe); err != nil {
+		os.Remove(tempDst)
+		return fmt.Errorf("failed to replace binary: %w", err)
+	}
+
+	return nil
+}
+
+// downloadChecksums downloads and parses the checksums.txt file
+func downloadChecksums(url string) (map[string]string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to download asset: %s", resp.Status)
+		return nil, fmt.Errorf("failed to download checksums: %s", resp.Status)
 	}
 
-	// Extract
-	var foundBinary io.Reader
+	checksums := make(map[string]string)
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Fields(line)
+		if len(parts) >= 2 {
+			checksums[parts[1]] = parts[0]
+		}
+	}
 
-	gzr, err := gzip.NewReader(resp.Body)
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return checksums, nil
+}
+
+// downloadFile downloads a file from url to filepath
+func downloadFile(url, filepath string) error {
+	resp, err := http.Get(url)
 	if err != nil {
-		return fmt.Errorf("gzip reader failed: %w", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download: %s", resp.Status)
+	}
+
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+// calculateSHA256 calculates the SHA256 checksum of a file
+func calculateSHA256(filepath string) (string, error) {
+	f, err := os.Open(filepath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// extractFromTarGz extracts a specific file from a tar.gz archive and returns its content
+func extractFromTarGz(archivePath, targetFile string) ([]byte, error) {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	gzr, err := gzip.NewReader(f)
+	if err != nil {
+		return nil, err
 	}
 	defer gzr.Close()
 
@@ -142,54 +291,45 @@ func doUpdate(version string) error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("tar reading failed: %w", err)
+			return nil, err
 		}
 
-		if filepath.Base(header.Name) == binary {
-			foundBinary = tr
-			break
+		if filepath.Base(header.Name) == targetFile {
+			// Read the entire binary into memory
+			data, err := io.ReadAll(tr)
+			if err != nil {
+				return nil, err
+			}
+			return data, nil
 		}
 	}
 
-	if foundBinary == nil {
-		return fmt.Errorf("binary '%s' not found in release archive", binary)
-	}
+	return nil, fmt.Errorf("file '%s' not found in archive", targetFile)
+}
 
-	// Locate current binary
-	exe, err := os.Executable()
+// extractFromZip extracts a specific file from a zip archive and returns its content
+func extractFromZip(archivePath, targetFile string) ([]byte, error) {
+	r, err := zip.OpenReader(archivePath)
 	if err != nil {
-		return fmt.Errorf("failed to locate executable: %w", err)
+		return nil, err
 	}
-	
-	realPath, err := filepath.EvalSymlinks(exe)
-	if err == nil {
-		exe = realPath
-	}
+	defer r.Close()
 
-	// Write new binary to a temp file first (in the same directory to allow atomic move)
-	installDir := filepath.Dir(exe)
-	tempDst := filepath.Join(installDir, fmt.Sprintf(".%s.new", binary))
+	for _, f := range r.File {
+		if filepath.Base(f.Name) == targetFile {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
+			defer rc.Close()
 
-	outf, err := os.OpenFile(tempDst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
-	if err != nil {
-		if os.IsPermission(err) {
-			return fmt.Errorf("permission denied writing to %s: please run with sudo", installDir)
+			data, err := io.ReadAll(rc)
+			if err != nil {
+				return nil, err
+			}
+			return data, nil
 		}
-		return fmt.Errorf("failed to create new binary file: %w", err)
 	}
 
-	_, err = io.Copy(outf, foundBinary)
-	outf.Close() // Close BEFORE renaming
-	if err != nil {
-		os.Remove(tempDst)
-		return fmt.Errorf("failed to write new binary: %w", err)
-	}
-
-	// Atomic rename (replace)
-	if err := os.Rename(tempDst, exe); err != nil {
-		os.Remove(tempDst)
-		return fmt.Errorf("failed to replace binary: %w", err)
-	}
-
-	return nil
+	return nil, fmt.Errorf("file '%s' not found in archive", targetFile)
 }

@@ -148,7 +148,7 @@ gh-inspect uninstall
 
 #### `init` & `config`
 
-Initialize or manage configuration. See [Configuration](#%EF%B8%8F-configuration) for details.
+Initialize or manage configuration. See [Configuration](#-configuration) for details.
 
 ### Examples
 

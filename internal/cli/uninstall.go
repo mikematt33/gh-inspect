@@ -45,5 +45,6 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("gh-inspect successfully uninstalled.")
+	fmt.Println("\nNote: The current process is still running. The binary will be fully removed after this command exits.")
 	return nil
 }

@@ -20,14 +20,14 @@ var getOrgRepositories = func(orgName string) ([]*github.Repository, error) {
 	// ideally, org command should load config first.
 	// Refactoring org command to load config is better, but let's see.
 	// Actually, runOrgAnalysis calls RunAnalysisPipeline later, but we need the client NOW to list repos.
-	
+
 	// Let's load config just for the token
 	cfg, _ := config.Load()
 	token := ""
 	if cfg != nil {
 		token = cfg.Global.GitHubToken
 	}
-	
+
 	finalToken := ghclient.ResolveToken(token)
 
 	if finalToken == "" {
@@ -41,7 +41,7 @@ var getOrgRepositories = func(orgName string) ([]*github.Repository, error) {
 var orgCmd = &cobra.Command{
 	Use:   "org [organization]",
 	Short: "Analyze an entire GitHub organization",
-	Long:  `Scan all active repositories in a GitHub organization.
+	Long: `Scan all active repositories in a GitHub organization.
 Automatically fetches all repositories, filters out archived ones, and runs the health analysis on each.`,
 	Example: `  gh-inspect org my-org
   gh-inspect org my-org --fail-under=80`,
@@ -59,7 +59,6 @@ func init() {
 
 func runOrgAnalysis(cmd *cobra.Command, args []string) {
 	orgName := args[0]
-
 
 	fmt.Printf("Fetching repositories for organization '%s'...\n", orgName)
 

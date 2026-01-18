@@ -39,7 +39,7 @@ func TestRunCmd(t *testing.T) {
 	// Restore stdout
 	w.Close()
 	os.Stdout = oldStdout
-	
+
 	if err != nil {
 		t.Fatalf("runCmd failed: %v", err)
 	}
@@ -53,10 +53,9 @@ func TestRunCmd(t *testing.T) {
 	// But it shouldn't error out.
 	// Let's verify pipelineRunner was called with correct args?
 	// The mock doesn't assert args here, simplistic test.
-	
+
 	if output == "" {
 		// It might be empty if TextRenderer prints nothing for empty report, but usually it prints headers.
 		// Let's check if it ran at least.
 	}
 }
-

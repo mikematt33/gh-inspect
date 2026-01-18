@@ -97,7 +97,7 @@ func runList(cmd *cobra.Command, args []string) {
 		fmt.Printf("Error loading config: %v\n", err)
 		return
 	}
-	
+
 	// Just dump the yaml
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
