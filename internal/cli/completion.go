@@ -1,15 +1,40 @@
 package cli
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var completionAuto bool
+
+// getCompletionVersion returns a hash representing the current command structure
+// This is used to detect if completions are outdated
+func getCompletionVersion() string {
+	h := sha256.New()
+	// Include version and command structure in hash
+	h.Write([]byte(Version))
+	
+	// Walk through all commands to create a signature
+	var walkCommands func(*cobra.Command)
+	walkCommands = func(cmd *cobra.Command) {
+		h.Write([]byte(cmd.Use))
+		cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+			h.Write([]byte(flag.Name))
+		})
+		for _, subCmd := range cmd.Commands() {
+			walkCommands(subCmd)
+		}
+	}
+	walkCommands(rootCmd)
+	
+	return fmt.Sprintf("%x", h.Sum(nil))[:12]
+}
 
 var completionCmd = &cobra.Command{
 	Use:   "completion [bash|zsh|fish|powershell]",
@@ -21,6 +46,11 @@ Automatic Configuration:
 
   This will detect your shell (Bash/Zsh) and append the necessary setup command
   to your configuration file (.bashrc/.zshrc).
+
+Check Completion Status:
+  $ gh-inspect completion status
+
+  Checks if installed completions match the current version.
 
 Manual Configuration:
 
@@ -51,7 +81,7 @@ Fish:
   $ gh-inspect completion fish > ~/.config/fish/completions/gh-inspect.fish
 `,
 	DisableFlagsInUseLine: true,
-	ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
+	ValidArgs:             []string{"bash", "zsh", "fish", "powershell", "status"},
 	Args:                  cobra.MatchAll(cobra.ArbitraryArgs, cobra.OnlyValidArgs),
 	Run: func(cmd *cobra.Command, args []string) {
 		if completionAuto {
@@ -64,14 +94,23 @@ Fish:
 			return
 		}
 
+		if args[0] == "status" {
+			runCompletionStatus()
+			return
+		}
+
 		switch args[0] {
 		case "bash":
+			writeCompletionHeader(os.Stdout, "bash")
 			cmd.Root().GenBashCompletion(os.Stdout)
 		case "zsh":
+			writeCompletionHeader(os.Stdout, "zsh")
 			cmd.Root().GenZshCompletion(os.Stdout)
 		case "fish":
+			writeCompletionHeader(os.Stdout, "fish")
 			cmd.Root().GenFishCompletion(os.Stdout, true)
 		case "powershell":
+			writeCompletionHeader(os.Stdout, "powershell")
 			cmd.Root().GenPowerShellCompletionWithDesc(os.Stdout)
 		}
 	},
@@ -153,4 +192,102 @@ func runAutoCompletion() {
 
 	fmt.Println("✅ Successfully configured completion.")
 	fmt.Printf("🔄 Please restart your terminal or run 'source %s' to activate.\n", targetFile)
+	fmt.Println("\n💡 Run 'gh-inspect completion status' to verify your completion setup.")
+}
+
+// writeCompletionHeader writes version metadata as a comment in completion scripts
+func writeCompletionHeader(w *os.File, shell string) {
+	version := getCompletionVersion()
+	var comment string
+	switch shell {
+	case "bash", "zsh":
+		comment = "#"
+	case "fish":
+		comment = "#"
+	case "powershell":
+		comment = "#"
+	}
+	fmt.Fprintf(w, "%s gh-inspect completion version: %s\n", comment, version)
+	fmt.Fprintf(w, "%s gh-inspect version: %s\n", comment, Version)
+	fmt.Fprintf(w, "%s Generated: %s\n\n", comment, "auto")
+}
+
+// runCompletionStatus checks if installed completions match current version
+func runCompletionStatus() {
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		fmt.Println("❌ Could not detect shell (SHELL env var empty)")
+		return
+	}
+
+	shellName := filepath.Base(shell)
+	currentVersion := getCompletionVersion()
+
+	fmt.Printf("Current Version: %s (gh-inspect %s)\n", currentVersion, Version)
+	fmt.Printf("Shell: %s\n\n", shellName)
+
+	// Check common completion file locations based on shell
+	var checkPaths []string
+	home, _ := os.UserHomeDir()
+
+	switch shellName {
+	case "bash":
+		checkPaths = []string{
+			filepath.Join(home, ".bashrc"),
+			"/etc/bash_completion.d/gh-inspect",
+			"/usr/local/etc/bash_completion.d/gh-inspect",
+		}
+	case "zsh":
+		checkPaths = []string{
+			filepath.Join(home, ".zshrc"),
+			// Common zsh completion paths
+			"/usr/local/share/zsh/site-functions/_gh-inspect",
+			"/usr/share/zsh/site-functions/_gh-inspect",
+		}
+	case "fish":
+		checkPaths = []string{
+			filepath.Join(home, ".config/fish/completions/gh-inspect.fish"),
+		}
+	default:
+		fmt.Printf("⚠️  Completion status check not supported for %s\n", shellName)
+		return
+	}
+
+	found := false
+	outdated := false
+
+	for _, path := range checkPaths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+
+		// Check if file contains gh-inspect completion references
+		if !strings.Contains(string(content), "gh-inspect") {
+			continue
+		}
+
+		found = true
+		fmt.Printf("📄 Found: %s\n", path)
+
+		// Check version marker
+		if strings.Contains(string(content), "completion version: "+currentVersion) {
+			fmt.Println("   ✅ Up to date")
+		} else if strings.Contains(string(content), "completion version:") {
+			fmt.Println("   ⚠️  Outdated - regenerate with 'gh-inspect completion --auto'")
+			outdated = true
+		} else {
+			fmt.Println("   ⚠️  No version marker - may need regeneration")
+			outdated = true
+		}
+	}
+
+	if !found {
+		fmt.Println("❌ No completion configuration found")
+		fmt.Println("\nRun 'gh-inspect completion --auto' to set up completions")
+	} else if outdated {
+		fmt.Println("\n💡 Run 'gh-inspect completion --auto' to update")
+	} else {
+		fmt.Println("\n✅ Completions are up to date")
+	}
 }

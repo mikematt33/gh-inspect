@@ -21,8 +21,9 @@ Displays a progress bar during analysis. Use --quiet for CI/CD environments.`,
 	Example: `  gh-inspect user octocat
   gh-inspect user octocat --deep
   gh-inspect user octocat --quiet --format=json`,
-	Args: cobra.ExactArgs(1),
-	Run:  runUserAnalysis,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completeUsers,
+	Run:               runUserAnalysis,
 }
 
 var getUserRepositories = func(username string) ([]*github.Repository, error) {
@@ -46,6 +47,10 @@ func init() {
 
 func runUserAnalysis(cmd *cobra.Command, args []string) {
 	username := args[0]
+
+	// Record user usage for completions
+	recordUsage(username, "user")
+
 	if shouldPrintInfo() {
 		fmt.Printf("Fetching repositories for user '%s'...\n", username)
 	}

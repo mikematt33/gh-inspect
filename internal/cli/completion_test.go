@@ -30,7 +30,7 @@ func TestCompletionCmd(t *testing.T) {
 	}
 
 	// Verify valid args
-	expectedArgs := []string{"bash", "zsh", "fish", "powershell"}
+	expectedArgs := []string{"bash", "zsh", "fish", "powershell", "status"}
 	if len(completionCmd.ValidArgs) != len(expectedArgs) {
 		t.Errorf("completionCmd.ValidArgs length = %d, want %d", len(completionCmd.ValidArgs), len(expectedArgs))
 	}

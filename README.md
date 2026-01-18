@@ -165,7 +165,7 @@ gh-inspect uninstall
 
 #### `completion`
 
-Generate shell completion scripts for bash, zsh, etc.
+Generate and manage shell completion scripts for bash, zsh, fish, and PowerShell.
 
 **Automatic Setup:**
 
@@ -173,11 +173,47 @@ Generate shell completion scripts for bash, zsh, etc.
 gh-inspect completion --auto
 ```
 
-**Manual Setup:**
-Run `gh-inspect completion <shell> --help` for instructions.
+This will detect your shell and configure completions automatically.
+
+**Check Completion Status:**
 
 ```bash
+gh-inspect completion status
+```
+
+Verifies if your installed completions match the current version and warns if they're outdated.
+
+**Smart Completions:**
+
+Completions support:
+
+- ✅ **All flags and commands** - Auto-generated from Cobra
+- ✅ **Recent repositories** - Suggests previously analyzed repos
+- ✅ **Organizations** - Lists your GitHub organizations
+- ✅ **Users** - Includes your authenticated user and recent users
+- ✅ **Auto-update detection** - Warns when completions are stale
+
+**Manual Setup:**
+
+Run `gh-inspect completion <shell> --help` for shell-specific instructions.
+
+```bash
+# Bash
 source <(gh-inspect completion bash)
+
+# Zsh
+source <(gh-inspect completion zsh)
+
+# Fish
+gh-inspect completion fish | source
+```
+
+**Regenerate After Updates:**
+
+When you update gh-inspect to a new version with new commands, regenerate completions:
+
+```bash
+gh-inspect completion --auto
 ```
 
 #### `init` & `config`

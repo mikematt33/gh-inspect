@@ -37,8 +37,9 @@ Use --quiet to suppress progress output or --verbose for detailed information.`,
   gh-inspect run owner/repo1 owner/repo2 --deep
   gh-inspect run owner/repo --format=json > report.json
   gh-inspect run owner/repo --quiet --fail-under=80`,
-		Args: cobra.MinimumNArgs(1),
-		Run:  runAnalysis,
+		Args:              cobra.MinimumNArgs(1),
+		ValidArgsFunction: completeRepositories,
+		Run:               runAnalysis,
 	}
 )
 
@@ -130,6 +131,11 @@ func init() {
 }
 
 func runAnalysis(cmd *cobra.Command, args []string) {
+	// Record repository usage for completions
+	for _, repo := range args {
+		recordUsage(repo, "repo")
+	}
+
 	opts := AnalysisOptions{
 		Repos: args,
 		Since: flagSince,

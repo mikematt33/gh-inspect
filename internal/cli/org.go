@@ -35,8 +35,9 @@ Displays a progress bar during analysis. Use --quiet for CI/CD environments.`,
 	Example: `  gh-inspect org my-org
   gh-inspect org my-org --fail-under=80
   gh-inspect org my-org --quiet --format=json`,
-	Args: cobra.ExactArgs(1),
-	Run:  runOrgAnalysis,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completeOrganizations,
+	Run:               runOrgAnalysis,
 }
 
 func init() {
@@ -46,6 +47,9 @@ func init() {
 
 func runOrgAnalysis(cmd *cobra.Command, args []string) {
 	orgName := args[0]
+
+	// Record organization usage for completions
+	recordUsage(orgName, "org")
 
 	if shouldPrintInfo() {
 		fmt.Printf("Fetching repositories for organization '%s'...\n", orgName)
