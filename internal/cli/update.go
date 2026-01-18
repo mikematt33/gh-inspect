@@ -38,7 +38,11 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get latest release: %w", err)
 	}
 
-	if latest.TagName == Version {
+	// Normalize versions by stripping 'v' prefix for comparison
+	currentVer := strings.TrimPrefix(Version, "v")
+	latestVer := strings.TrimPrefix(latest.TagName, "v")
+
+	if currentVer == latestVer {
 		fmt.Printf("You are already using the latest version: %s\n", Version)
 		return nil
 	}

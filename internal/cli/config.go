@@ -51,6 +51,26 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 	configCmd.AddCommand(setTokenCmd)
 	configCmd.AddCommand(setCmd)
+
+	setCmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return []string{
+			"global.concurrency",
+			"global.github_token",
+			"analyzers.pr_flow.enabled",
+			"analyzers.pr_flow.params.stale_threshold_days",
+			"analyzers.pr_flow.params.cycle_time_target_hours",
+			"analyzers.issue_hygiene.enabled",
+			"analyzers.issue_hygiene.params.stale_threshold_days",
+			"analyzers.issue_hygiene.params.zombie_threshold_days",
+			"analyzers.repo_health.enabled",
+			"analyzers.ci.enabled",
+			// Add more valid keys manually or reflection based if possible, manual is safer for now.
+		}, cobra.ShellCompDirectiveNoFileComp
+	}
+
 	configCmd.AddCommand(listCmd)
 }
 

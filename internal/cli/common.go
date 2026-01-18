@@ -62,7 +62,7 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	// 3. Setup Dependencies
 	token := ghclient.ResolveToken(cfg.Global.GitHubToken)
 	if token == "" {
-		return nil, fmt.Errorf("error: No GitHub token found. Please set GITHUB_TOKEN, run 'gh auth login', or set it in config")
+		return nil, fmt.Errorf("no GitHub token found. Please run 'gh-inspect auth' to login")
 	}
 	client := ghclient.NewClient(token)
 

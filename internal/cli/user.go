@@ -32,7 +32,7 @@ var getUserRepositories = func(username string) ([]*github.Repository, error) {
 	finalToken := ghclient.ResolveToken(token)
 
 	if finalToken == "" {
-		return nil, fmt.Errorf("no GitHub token found. Please set GITHUB_TOKEN or run 'gh auth login' or 'gh-inspect config set-token'")
+		return nil, fmt.Errorf("no GitHub token found. Please run 'gh-inspect auth' to login")
 	}
 	client := ghclient.NewClient(finalToken)
 
@@ -42,7 +42,15 @@ var getUserRepositories = func(username string) ([]*github.Repository, error) {
 func init() {
 	rootCmd.AddCommand(userCmd)
 	userCmd.Flags().StringVarP(&flagFormat, "format", "f", "text", "Output format (text, json)")
+	userCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"text", "json"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
 	userCmd.Flags().StringVarP(&flagSince, "since", "s", "30d", "Lookback window")
+	userCmd.RegisterFlagCompletionFunc("since", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"30d", "90d", "180d", "24h", "720h"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
 	userCmd.Flags().BoolVarP(&flagDeep, "deep", "d", false, "Enable deep scanning")
 	userCmd.Flags().IntVar(&flagFail, "fail-under", 0, "Exit with error code 1 if average health score is below this value")
 }

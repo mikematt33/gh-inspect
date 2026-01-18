@@ -49,19 +49,13 @@ make build
 
 ## ⚡ Quick Start
 
-1.  **Authentication**: Ensure you have a GitHub token set.
+1.  **Authentication**:
 
     ```bash
-    export GITHUB_TOKEN=your_token_here
-    # OR if you use the GitHub CLI:
-    gh auth login
+    gh-inspect auth
     ```
 
-    _or configure it directly:_
-
-    ```bash
-    gh-inspect config set-token YOUR_TOKEN
-    ```
+    _This will help you login via GitHub CLI or paste a token._
 
 2.  **Run Analysis**:
     Analyze a specific repository.
@@ -76,6 +70,14 @@ make build
 ## ⚙️ Usage Details
 
 ### Available Commands
+
+#### `auth` - Authenticate
+
+Log in to GitHub to access private repos and increase rate limits.
+
+```bash
+gh-inspect auth
+```
 
 #### `run` - Analyze Repositories
 
@@ -144,6 +146,23 @@ Uninstall the CLI from your system.
 
 ```bash
 gh-inspect uninstall
+```
+
+#### `completion`
+
+Generate shell completion scripts for bash, zsh, etc.
+
+**Automatic Setup:**
+
+```bash
+gh-inspect completion --auto
+```
+
+**Manual Setup:**
+Run `gh-inspect completion <shell> --help` for instructions.
+
+```bash
+source <(gh-inspect completion bash)
 ```
 
 #### `init` & `config`

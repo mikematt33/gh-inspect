@@ -31,7 +31,7 @@ var getOrgRepositories = func(orgName string) ([]*github.Repository, error) {
 	finalToken := ghclient.ResolveToken(token)
 
 	if finalToken == "" {
-		return nil, fmt.Errorf("no GitHub token found. Please set GITHUB_TOKEN or run 'gh auth login'")
+		return nil, fmt.Errorf("no GitHub token found. Please run 'gh-inspect auth' to login")
 	}
 	client := ghclient.NewClient(finalToken)
 
@@ -52,7 +52,14 @@ Automatically fetches all repositories, filters out archived ones, and runs the 
 func init() {
 	rootCmd.AddCommand(orgCmd)
 	orgCmd.Flags().StringVarP(&flagFormat, "format", "f", "text", "Output format (text, json)")
+	orgCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"text", "json"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
 	orgCmd.Flags().StringVarP(&flagSince, "since", "s", "30d", "Lookback window")
+	orgCmd.RegisterFlagCompletionFunc("since", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"30d", "90d", "180d", "24h", "720h"}, cobra.ShellCompDirectiveNoFileComp
+	})
 	orgCmd.Flags().BoolVarP(&flagDeep, "deep", "d", false, "Enable deep scanning")
 	orgCmd.Flags().IntVar(&flagFail, "fail-under", 0, "Exit with error code 1 if average health score is below this value")
 }
