@@ -46,13 +46,20 @@ Use --quiet to suppress progress output or --verbose for detailed information.`,
 			return cobra.MinimumNArgs(1)(cmd, args)
 		},
 		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// When listing analyzers, skip pre-run checks
 			if flagListAnalyzers {
-				listAnalyzers()
+				return nil
 			}
 			return nil
 		},
 		ValidArgsFunction: completeRepositories,
-		Run:               runAnalysis,
+		Run: func(cmd *cobra.Command, args []string) {
+			if flagListAnalyzers {
+				listAnalyzers()
+				return
+			}
+			runAnalysis(cmd, args)
+		},
 	}
 )
 
@@ -69,7 +76,7 @@ var (
 	flagListAnalyzers bool
 )
 
-// listAnalyzers prints all available analyzers with descriptions and exits
+// listAnalyzers prints all available analyzers with descriptions
 func listAnalyzers() {
 	fmt.Println("Available Analyzers:")
 	fmt.Println()
@@ -87,7 +94,6 @@ func listAnalyzers() {
 	fmt.Println("  --exclude=releases,security  Skip specified analyzers")
 	fmt.Println()
 	fmt.Println("Note: Analyzers can also be enabled/disabled in the config file.")
-	os.Exit(0)
 }
 
 // registerAnalysisFlags adds common analysis flags to a command

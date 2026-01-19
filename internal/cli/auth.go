@@ -84,7 +84,6 @@ func runAuth(cmd *cobra.Command, args []string) {
 	if token != "" {
 		fmt.Println("✅ You are already authenticated!")
 		fmt.Println()
-		fmt.Println()
 
 		// Show where the token is from
 		if configToken != "" && configToken == token {
@@ -106,8 +105,7 @@ func runAuth(cmd *cobra.Command, args []string) {
 		fmt.Println()
 
 		if !promptYesNo("Do you want to change your authentication?") {
-			fmt.Println()
-			fmt.Println("\nNo changes made.")
+			fmt.Println("No changes made.")
 			return
 		}
 		fmt.Println()
@@ -116,7 +114,6 @@ func runAuth(cmd *cobra.Command, args []string) {
 	// Start new authentication flow
 	fmt.Println("Authenticate with GitHub")
 	fmt.Println("------------------------")
-	fmt.Println()
 	fmt.Println()
 
 	// Check if 'gh' is available
