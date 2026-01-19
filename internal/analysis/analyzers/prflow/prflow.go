@@ -53,13 +53,37 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	var totalMergeTime time.Duration
 	var mergedCount int
 	var totalClosed int = len(recentClosedPRs)
+	var selfMergeCount int
+	var draftPRCount int
+	var hasDescriptionCount int
 
 	for _, pr := range recentClosedPRs {
 		if pr.MergedAt != nil {
 			mergedCount++
 			totalMergeTime += pr.MergedAt.Sub(pr.CreatedAt.Time)
+
+			// Check self-merge (author == merger)
+			if pr.User != nil && pr.MergedBy != nil {
+				if pr.User.GetLogin() == pr.MergedBy.GetLogin() {
+					selfMergeCount++
+				}
+			}
+		}
+
+		// Check if PR was a draft
+		if pr.GetDraft() {
+			draftPRCount++
+		}
+
+		// Check description quality (has meaningful body)
+		if len(pr.GetBody()) > 50 {
+			hasDescriptionCount++
 		}
 	}
+
+	// Metrics Calculation
+	var metrics []models.Metric
+	var sizeFindings []models.Finding // Local findings for size analysis
 
 	// 2. Sample Open PRs for "Time to First Review" (Expensive call)
 	// WE NEED TO BE CAREFUL HERE. 'IncludeDeep' check.
@@ -87,6 +111,8 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 
 		var totalReviewTime time.Duration
 		var reviewCount int
+		var totalApprovals int
+		var prsWithReviews int
 
 		for i, pr := range samplePRs {
 			if i >= limitChecks {
@@ -97,24 +123,47 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 				continue
 			}
 			if len(reviews) > 0 {
+				prsWithReviews++
 				firstReview := reviews[0].SubmittedAt
 				if firstReview.After(pr.CreatedAt.Time) {
 					totalReviewTime += firstReview.Sub(pr.CreatedAt.Time)
 					reviewCount++
+				}
+
+				// Count approvals
+				for _, review := range reviews {
+					if review.GetState() == "APPROVED" {
+						totalApprovals++
+					}
 				}
 			}
 		}
 
 		if reviewCount > 0 {
 			avgReview := totalReviewTime / time.Duration(reviewCount)
-			// (Implementation detail: adding this to metrics below)
-			_ = avgReview
+			avgReviewTimeHours := avgReview.Hours()
+
+			metrics = append(metrics, models.Metric{
+				Key:          "avg_time_to_first_review",
+				Value:        avgReviewTimeHours,
+				Unit:         "hours",
+				DisplayValue: fmt.Sprintf("%.1fh", avgReviewTimeHours),
+				Description:  "Average time until first review",
+			})
+		}
+
+		if prsWithReviews > 0 {
+			avgApprovals := float64(totalApprovals) / float64(prsWithReviews)
+
+			metrics = append(metrics, models.Metric{
+				Key:          "avg_approvals_per_pr",
+				Value:        avgApprovals,
+				Unit:         "count",
+				DisplayValue: fmt.Sprintf("%.1f", avgApprovals),
+				Description:  "Average number of approvals per PR",
+			})
 		}
 	}
-
-	// Metrics Calculation
-	var metrics []models.Metric
-	var sizeFindings []models.Finding // Local findings for size analysis
 
 	if mergedCount > 0 {
 		avgTime := totalMergeTime / time.Duration(mergedCount)
@@ -206,6 +255,35 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 			Unit:         "percent",
 			DisplayValue: fmt.Sprintf("%.0f%%", ratio*100),
 			Description:  "Percentage of closed PRs that were merged",
+		})
+
+		if mergedCount > 0 {
+			selfMergeRate := float64(selfMergeCount) / float64(mergedCount) * 100
+			metrics = append(metrics, models.Metric{
+				Key:          "self_merge_rate",
+				Value:        selfMergeRate,
+				Unit:         "percent",
+				DisplayValue: fmt.Sprintf("%.0f%%", selfMergeRate),
+				Description:  "Percentage of PRs merged by their author",
+			})
+		}
+
+		draftRate := float64(draftPRCount) / float64(totalClosed) * 100
+		metrics = append(metrics, models.Metric{
+			Key:          "draft_pr_rate",
+			Value:        draftRate,
+			Unit:         "percent",
+			DisplayValue: fmt.Sprintf("%.0f%%", draftRate),
+			Description:  "Percentage of PRs started as draft",
+		})
+
+		descriptionRate := float64(hasDescriptionCount) / float64(totalClosed) * 100
+		metrics = append(metrics, models.Metric{
+			Key:          "pr_description_quality",
+			Value:        descriptionRate,
+			Unit:         "percent",
+			DisplayValue: fmt.Sprintf("%.0f%%", descriptionRate),
+			Description:  "Percentage of PRs with meaningful descriptions",
 		})
 	}
 

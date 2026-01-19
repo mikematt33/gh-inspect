@@ -120,6 +120,15 @@ func TestPromptYesNo(t *testing.T) {
 }
 
 func TestSaveToken(t *testing.T) {
+	// Save original validator
+	originalValidateToken := validateToken
+	defer func() { validateToken = originalValidateToken }()
+
+	// Mock validation to always succeed
+	validateToken = func(token string) error {
+		return nil
+	}
+
 	// Create a temp directory for the test
 	tmpDir, err := os.MkdirTemp("", "gh-inspect-auth-test")
 	if err != nil {

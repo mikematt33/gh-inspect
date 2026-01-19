@@ -72,7 +72,7 @@ func createDefaultConfig(path string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("error creating config directory: %w", err)
 	}
-	return os.WriteFile(path, []byte(defaultConfig), 0644)
+	return os.WriteFile(path, []byte(defaultConfig), 0600)
 }
 
 func runInit(cmd *cobra.Command, args []string) {

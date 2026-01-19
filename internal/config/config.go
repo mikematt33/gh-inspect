@@ -22,6 +22,9 @@ type AnalyzersConfig struct {
 	IssueHygiene IssueHygieneConfig `yaml:"issue_hygiene"`
 	RepoHealth   RepoHealthConfig   `yaml:"repo_health"`
 	CI           CIConfig           `yaml:"ci"`
+	Security     SecurityConfig     `yaml:"security"`
+	Releases     ReleasesConfig     `yaml:"releases"`
+	Branches     BranchesConfig     `yaml:"branches"`
 }
 
 type PRFlowConfig struct {
@@ -49,6 +52,23 @@ type RepoHealthConfig struct {
 
 type CIConfig struct {
 	Enabled bool `yaml:"enabled"`
+}
+
+type SecurityConfig struct {
+	Enabled bool `yaml:"enabled"`
+}
+
+type ReleasesConfig struct {
+	Enabled bool `yaml:"enabled"`
+}
+
+type BranchesConfig struct {
+	Enabled bool          `yaml:"enabled"`
+	Params  BranchParams `yaml:"params"`
+}
+
+type BranchParams struct {
+	StaleThresholdDays int `yaml:"stale_threshold_days"`
 }
 
 func GetConfigPath() (string, error) {
@@ -84,6 +104,18 @@ func Load() (*Config, error) {
 			},
 			CI: CIConfig{
 				Enabled: true,
+			},
+			Security: SecurityConfig{
+				Enabled: true,
+			},
+			Releases: ReleasesConfig{
+				Enabled: true,
+			},
+			Branches: BranchesConfig{
+				Enabled: true,
+				Params: BranchParams{
+					StaleThresholdDays: 90,
+				},
 			},
 		},
 	}

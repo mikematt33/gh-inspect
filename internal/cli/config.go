@@ -89,7 +89,7 @@ func saveConfig(cfg *config.Config) error {
 		return fmt.Errorf("error marshaling config: %w", err)
 	}
 
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
 		return fmt.Errorf("error writing config file: %w", err)
 	}
 
@@ -101,12 +101,13 @@ func runSetToken(cmd *cobra.Command, args []string) {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Printf("Error loading config: %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	cfg.Global.GitHubToken = args[0]
 	if err := saveConfig(cfg); err != nil {
 		fmt.Println(err)
+		os.Exit(1)
 	}
 }
 
@@ -114,14 +115,14 @@ func runList(cmd *cobra.Command, args []string) {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Printf("Error loading config: %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	// Just dump the yaml
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		fmt.Printf("Error marshaling config: %v\n", err)
-		return
+		os.Exit(1)
 	}
 	fmt.Println(string(data))
 }
@@ -133,16 +134,17 @@ func runSet(cmd *cobra.Command, args []string) {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Printf("Error loading config: %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	if err := setConfigValue(cfg, key, valStr); err != nil {
 		fmt.Printf("Error setting value: %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	if err := saveConfig(cfg); err != nil {
 		fmt.Println(err)
+		os.Exit(1)
 	}
 }
 

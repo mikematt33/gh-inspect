@@ -45,14 +45,15 @@ func ResolveToken(configToken string) string {
 
 // NewClient creates a new GitHub client wrapper.
 func NewClient(token string) *ClientWrapper {
+	var ghClient *github.Client
 	if token == "" {
-		return &ClientWrapper{
-			client: github.NewClient(nil),
-		}
+		ghClient = github.NewClient(nil)
+	} else {
+		ghClient = github.NewClient(nil).WithAuthToken(token)
 	}
 
 	return &ClientWrapper{
-		client: github.NewClient(nil).WithAuthToken(token),
+		client: ghClient,
 	}
 }
 
@@ -118,7 +119,10 @@ func (c *ClientWrapper) ListUserRepositories(ctx context.Context, user string, o
 	}
 	return allRepos, nil
 }
-
+// GetUnderlyingClient returns the raw GitHub client for advanced operations
+func (c *ClientWrapper) GetUnderlyingClient() *github.Client {
+	return c.client
+}
 // GetPullRequests implements analysis.Client.
 func (c *ClientWrapper) GetPullRequests(ctx context.Context, owner, repo string, opts *github.PullRequestListOptions) ([]*github.PullRequest, error) {
 	prs, resp, err := c.client.PullRequests.List(ctx, owner, repo, opts)
@@ -224,6 +228,29 @@ func (c *ClientWrapper) GetIssues(ctx context.Context, owner, repo string, opts 
 		opts.Page = resp.NextPage
 	}
 	return allIssues, nil
+}
+
+func (c *ClientWrapper) GetIssueComments(ctx context.Context, owner, repo string, number int, opts *github.IssueListCommentsOptions) ([]*github.IssueComment, error) {
+	var all []*github.IssueComment
+	if opts == nil {
+		opts = &github.IssueListCommentsOptions{ListOptions: github.ListOptions{PerPage: 100}}
+	} else if opts.PerPage == 0 {
+		opts.PerPage = 100
+	}
+
+	for {
+		comments, resp, err := c.client.Issues.ListComments(ctx, owner, repo, number, opts)
+		if err != nil {
+			return nil, err
+		}
+		c.checkRateLimit(resp)
+		all = append(all, comments...)
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return all, nil
 }
 
 // GetWorkflowRuns implements analysis.Client.

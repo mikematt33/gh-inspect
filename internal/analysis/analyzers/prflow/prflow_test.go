@@ -61,11 +61,17 @@ func (m *MockClient) GetCombinedStatus(ctx context.Context, owner, repo, ref str
 func (m *MockClient) GetIssues(ctx context.Context, owner, repo string, opts *github.IssueListByRepoOptions) ([]*github.Issue, error) {
 	return m.Issues, nil
 }
+func (m *MockClient) GetIssueComments(ctx context.Context, owner, repo string, number int, opts *github.IssueListCommentsOptions) ([]*github.IssueComment, error) {
+	return nil, nil
+}
 func (m *MockClient) GetWorkflowRuns(ctx context.Context, owner, repo string, opts *github.ListWorkflowRunsOptions) (*github.WorkflowRuns, *github.Response, error) {
 	return m.WorkflowRuns, nil, nil
 }
 func (m *MockClient) ListRepositories(ctx context.Context, org string, opts *github.RepositoryListByOrgOptions) ([]*github.Repository, error) {
 	return m.Repositories, nil
+}
+func (m *MockClient) GetUnderlyingClient() *github.Client {
+	return nil
 }
 
 func TestAnalyzer_Analyze(t *testing.T) {

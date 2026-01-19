@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/v60/github"
@@ -62,6 +63,11 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	var staleCount int
 	var zombieCount int
 	var findings []models.Finding
+	var assignedCount int
+	var bugCount int
+	var featureCount int
+	var totalResponseTime time.Duration
+	var responseCount int
 
 	now := time.Now()
 
@@ -97,21 +103,93 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 				})
 			}
 		}
+
+		// Assignee coverage
+		if len(issue.Assignees) > 0 {
+			assignedCount++
+		}
+
+		// Bug vs Feature classification
+		isBugIssue := false
+		isFeatureIssue := false
+		for _, label := range issue.Labels {
+			labelName := strings.ToLower(label.GetName())
+			if strings.Contains(labelName, "bug") {
+				isBugIssue = true
+			}
+			if strings.Contains(labelName, "feature") || strings.Contains(labelName, "enhancement") {
+				isFeatureIssue = true
+			}
+		}
+		if isBugIssue {
+			bugCount++
+		}
+		if isFeatureIssue {
+			featureCount++
+		}
 	}
 
 	// Lifetime calculation
 	var totalLifetime time.Duration
+	var issuesWithLinkedPR int
+
 	for _, issue := range closedIssues {
 		if issue.GetClosedAt().IsZero() {
 			continue
 		}
 		lifetime := issue.GetClosedAt().Time.Sub(issue.GetCreatedAt().Time)
 		totalLifetime += lifetime
+
+		// Check if issue has linked PR
+		if issue.PullRequestLinks != nil {
+			issuesWithLinkedPR++
+		}
+	}
+
+	// Calculate Time to First Response (sample to avoid excessive API calls)
+	// Sample from all issues (both open and closed) to get representative metrics
+	allIssues := append([]*github.Issue{}, openIssues...)
+	allIssues = append(allIssues, closedIssues...)
+	
+	sampleLimit := 10
+	if cfg.IncludeDeep {
+		sampleLimit = 30
+	}
+	if len(allIssues) < sampleLimit {
+		sampleLimit = len(allIssues)
+	}
+
+	for i := 0; i < sampleLimit; i++ {
+		issue := allIssues[i]
+		comments, err := client.GetIssueComments(ctx, repo.Owner, repo.Name, issue.GetNumber(), nil)
+		if err == nil && len(comments) > 0 {
+			firstComment := comments[0]
+			responseTime := firstComment.GetCreatedAt().Sub(issue.GetCreatedAt().Time)
+			if responseTime > 0 {
+				totalResponseTime += responseTime
+				responseCount++
+			}
+		}
 	}
 
 	avgLifetimeHours := 0.0
 	if len(closedIssues) > 0 {
 		avgLifetimeHours = totalLifetime.Hours() / float64(len(closedIssues))
+	}
+
+	avgResponseHours := 0.0
+	if responseCount > 0 {
+		avgResponseHours = totalResponseTime.Hours() / float64(responseCount)
+	}
+
+	assigneeRatio := 0.0
+	if len(openIssues) > 0 {
+		assigneeRatio = float64(assignedCount) / float64(len(openIssues))
+	}
+
+	issueWithPRRatio := 0.0
+	if len(closedIssues) > 0 {
+		issueWithPRRatio = float64(issuesWithLinkedPR) / float64(len(closedIssues))
 	}
 
 	labeledCount := 0
@@ -126,12 +204,17 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	}
 
 	metrics := []models.Metric{
-		{Key: "open_issues_total", Value: float64(len(openIssues)), DisplayValue: fmt.Sprintf("%d", len(openIssues))},
-		{Key: "closed_issues_in_window", Value: float64(len(closedIssues)), DisplayValue: fmt.Sprintf("%d", len(closedIssues))},
-		{Key: "stale_issues", Value: float64(staleCount), DisplayValue: fmt.Sprintf("%d", staleCount)},
-		{Key: "zombie_issues", Value: float64(zombieCount), DisplayValue: fmt.Sprintf("%d", zombieCount)},
-		{Key: "avg_issue_lifetime", Value: avgLifetimeHours, Unit: "hours", DisplayValue: fmt.Sprintf("%.1fh", avgLifetimeHours)},
-		{Key: "label_coverage", Value: labeledRatio, Unit: "percent", DisplayValue: fmt.Sprintf("%.0f%%", labeledRatio*100)},
+		{Key: "open_issues_total", Value: float64(len(openIssues)), DisplayValue: fmt.Sprintf("%d", len(openIssues)), Description: "Total open issues"},
+		{Key: "closed_issues_in_window", Value: float64(len(closedIssues)), DisplayValue: fmt.Sprintf("%d", len(closedIssues)), Description: "Issues closed in window"},
+		{Key: "stale_issues", Value: float64(staleCount), DisplayValue: fmt.Sprintf("%d", staleCount), Description: "Inactive issues beyond threshold"},
+		{Key: "zombie_issues", Value: float64(zombieCount), DisplayValue: fmt.Sprintf("%d", zombieCount), Description: "Very old open issues"},
+		{Key: "avg_issue_lifetime", Value: avgLifetimeHours, Unit: "hours", DisplayValue: fmt.Sprintf("%.1fh", avgLifetimeHours), Description: "Average time to close"},
+		{Key: "avg_first_response_time", Value: avgResponseHours, Unit: "hours", DisplayValue: fmt.Sprintf("%.1fh", avgResponseHours), Description: "Average time to first comment"},
+		{Key: "label_coverage", Value: labeledRatio, Unit: "percent", DisplayValue: fmt.Sprintf("%.0f%%", labeledRatio*100), Description: "% issues with labels"},
+		{Key: "assignee_coverage", Value: assigneeRatio, Unit: "percent", DisplayValue: fmt.Sprintf("%.0f%%", assigneeRatio*100), Description: "% open issues assigned"},
+		{Key: "issue_pr_link_rate", Value: issueWithPRRatio, Unit: "percent", DisplayValue: fmt.Sprintf("%.0f%%", issueWithPRRatio*100), Description: "% closed issues with linked PRs"},
+		{Key: "bug_count", Value: float64(bugCount), DisplayValue: fmt.Sprintf("%d", bugCount), Description: "Open bugs"},
+		{Key: "feature_count", Value: float64(featureCount), DisplayValue: fmt.Sprintf("%d", featureCount), Description: "Open feature requests"},
 	}
 
 	if len(findings) > 0 {
