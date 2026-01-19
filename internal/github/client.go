@@ -183,7 +183,7 @@ func (c *ClientWrapper) ListCommitsSince(ctx context.Context, owner, repo string
 
 func (c *ClientWrapper) GetRepository(ctx context.Context, owner, repo string) (*github.Repository, error) {
 	cacheKey := fmt.Sprintf("%s/%s", owner, repo)
-	
+
 	// Check cache first
 	c.cacheMu.RLock()
 	if cached, ok := c.repoCache[cacheKey]; ok {
@@ -191,18 +191,18 @@ func (c *ClientWrapper) GetRepository(ctx context.Context, owner, repo string) (
 		return cached, nil
 	}
 	c.cacheMu.RUnlock()
-	
+
 	// Fetch from API
 	r, _, err := c.client.Repositories.Get(ctx, owner, repo)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Store in cache
 	c.cacheMu.Lock()
 	c.repoCache[cacheKey] = r
 	c.cacheMu.Unlock()
-	
+
 	return r, nil
 }
 

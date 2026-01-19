@@ -222,8 +222,6 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 			progressbar.OptionSetDescription("Analyzing repositories"),
 			progressbar.OptionSetWidth(40),
 			progressbar.OptionShowCount(),
-			progressbar.OptionShowIts(),
-			progressbar.OptionSetItsString("repos"),
 			progressbar.OptionThrottle(100*time.Millisecond),
 			progressbar.OptionClearOnFinish(),
 		)
@@ -330,8 +328,8 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	// Calculate Global Summary in a single pass
 	fullReport.Summary.TotalReposAnalyzed = len(fullReport.Repositories)
 
-	var sumHealth, sumCISuccess, sumPRCycle float64
-	var countHealth, countCI, countPRCycle int
+	var sumHealth, sumCISuccess, sumCIRuntime, sumPRCycle float64
+	var countHealth, countCI, countCIRuntime, countPRCycle int
 
 	for _, r := range fullReport.Repositories {
 		for _, az := range r.Analyzers {
@@ -354,6 +352,9 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 				case "success_rate":
 					sumCISuccess += m.Value
 					countCI++
+				case "avg_runtime":
+					sumCIRuntime += m.Value
+					countCIRuntime++
 				case "bus_factor":
 					if m.Value == 1 {
 						fullReport.Summary.BusFactor1Repos++
@@ -371,6 +372,9 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	}
 	if countCI > 0 {
 		fullReport.Summary.AvgCISuccessRate = sumCISuccess / float64(countCI)
+	}
+	if countCIRuntime > 0 {
+		fullReport.Summary.AvgCIRuntime = sumCIRuntime / float64(countCIRuntime)
 	}
 	if countPRCycle > 0 {
 		fullReport.Summary.AvgPRCycleTime = sumPRCycle / float64(countPRCycle)

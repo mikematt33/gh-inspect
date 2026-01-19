@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/mikematt33/gh-inspect/internal/analysis"
@@ -24,15 +25,32 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	// TIER 1: Commit Velocity & Bus Factor (Time-bounded)
 	// This respects the cfg.Since window to avoid excessive API calls
 
+	result := models.AnalyzerResult{Name: a.Name()}
+
 	// Get repository metadata for stars/forks
 	repoData, err := client.GetRepository(ctx, repo.Owner, repo.Name)
 	if err != nil {
-		return models.AnalyzerResult{Name: a.Name()}, err
+		return result, err
 	}
 
 	commits, err := client.ListCommitsSince(ctx, repo.Owner, repo.Name, cfg.Since)
 	if err != nil {
-		return models.AnalyzerResult{Name: a.Name()}, err
+		// Check if this is an empty repository error (409)
+		if strings.Contains(err.Error(), "409") && strings.Contains(err.Error(), "empty") {
+			// Return empty metrics for empty repos instead of failing
+			result.Metrics = append(result.Metrics, models.Metric{
+				Key:          "commits_total",
+				Value:        0,
+				DisplayValue: "0",
+			})
+			result.Findings = append(result.Findings, models.Finding{
+				Type:     "empty_repository",
+				Severity: models.SeverityInfo,
+				Message:  "Repository is empty (no commits)",
+			})
+			return result, nil
+		}
+		return result, err
 	}
 
 	totalCommits := float64(len(commits))

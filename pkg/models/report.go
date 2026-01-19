@@ -77,5 +77,6 @@ type GlobalSummary struct {
 	ReposAtRisk       int     `json:"repos_at_risk"`      // Count of repos with Health < 50
 	AvgHealthScore    float64 `json:"avg_health_score"`
 	AvgCISuccessRate  float64 `json:"avg_ci_success_rate"`
+	AvgCIRuntime      float64 `json:"avg_ci_runtime"`    // Avg CI runtime in seconds
 	AvgPRCycleTime    float64 `json:"avg_pr_cycle_time"` // Avg of avg cycle times
 }

@@ -24,11 +24,19 @@ func (a *Analyzer) Name() string {
 func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo analysis.TargetRepository, cfg analysis.Config) (models.AnalyzerResult, error) {
 	result := models.AnalyzerResult{Name: "ci"}
 
-	// List workflow runs created since cfg.Since
-	// Note: ListRepositoryWorkflowRuns supports filtering by creation time via query string conceptually
-	// but the library options use specific fields. We can check created_range if library supports it or filter locally.
-	// The library opts has 'Created' string. "2023-01-01..*"
+	// First, get the all-time total count (just 1 API call, 1 result to get total)
+	allTimeOpts := &github.ListWorkflowRunsOptions{
+		ListOptions: github.ListOptions{
+			PerPage: 1, // We only need the TotalCount, not the actual runs
+		},
+	}
+	allTimeRuns, _, err := client.GetWorkflowRuns(ctx, repo.Owner, repo.Name, allTimeOpts)
+	var allTimeTotal int
+	if err == nil && allTimeRuns.TotalCount != nil {
+		allTimeTotal = *allTimeRuns.TotalCount
+	}
 
+	// Now fetch runs within the time window for analysis
 	sinceStr := fmt.Sprintf(">=%s", cfg.Since.Format("2006-01-02"))
 	opts := &github.ListWorkflowRunsOptions{
 		Created: sinceStr,
@@ -40,11 +48,17 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	// We might need to page to get all runs in window
 	// Users can have many CI runs, so we'll fetch up to a reasonable limit
 	var allRuns []*github.WorkflowRun
-	maxRuns := 5000 // Increased limit to capture more data
+	var totalCount int // Actual total from API
+	maxRuns := 5000    // Increased limit to capture more data
 	for {
 		runs, resp, err := client.GetWorkflowRuns(ctx, repo.Owner, repo.Name, opts)
 		if err != nil {
 			return result, err
+		}
+
+		// Capture total count from first response
+		if totalCount == 0 && runs.TotalCount != nil {
+			totalCount = *runs.TotalCount
 		}
 
 		allRuns = append(allRuns, runs.WorkflowRuns...)
@@ -126,9 +140,21 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 
 	// Metrics
 	result.Metrics = append(result.Metrics, models.Metric{
-		Key:          "workflow_runs_total",
-		Value:        float64(totalRuns),
-		DisplayValue: fmt.Sprintf("%d", totalRuns),
+		Key:          "workflow_runs_all_time",
+		Value:        float64(allTimeTotal),
+		DisplayValue: fmt.Sprintf("%d", allTimeTotal),
+	})
+
+	result.Metrics = append(result.Metrics, models.Metric{
+		Key:          "workflow_runs_in_window",
+		Value:        float64(totalCount),
+		DisplayValue: fmt.Sprintf("%d", totalCount),
+	})
+
+	result.Metrics = append(result.Metrics, models.Metric{
+		Key:          "workflow_runs_analyzed",
+		Value:        float64(len(allRuns)),
+		DisplayValue: fmt.Sprintf("%d", len(allRuns)),
 	})
 
 	result.Metrics = append(result.Metrics, models.Metric{
