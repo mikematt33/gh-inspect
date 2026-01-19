@@ -12,10 +12,13 @@ import (
 
 	"github.com/mikematt33/gh-inspect/internal/analysis"
 	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/activity"
+	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/branches"
 	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/ci"
 	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/issuehygiene"
 	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/prflow"
+	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/releases"
 	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/repohealth"
+	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/security"
 	"github.com/mikematt33/gh-inspect/internal/config"
 	ghclient "github.com/mikematt33/gh-inspect/internal/github"
 	"github.com/mikematt33/gh-inspect/pkg/models"
@@ -127,6 +130,18 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 
 	if cfg.Analyzers.CI.Enabled {
 		analyzers = append(analyzers, ci.New())
+	}
+
+	if cfg.Analyzers.Security.Enabled {
+		analyzers = append(analyzers, security.New())
+	}
+
+	if cfg.Analyzers.Releases.Enabled {
+		analyzers = append(analyzers, releases.New())
+	}
+
+	if cfg.Analyzers.Branches.Enabled {
+		analyzers = append(analyzers, branches.New(cfg.Analyzers.Branches.Params.StaleThresholdDays))
 	}
 
 	start := time.Now()

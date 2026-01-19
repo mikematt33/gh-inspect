@@ -24,6 +24,12 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	// TIER 1: Commit Velocity & Bus Factor (Time-bounded)
 	// This respects the cfg.Since window to avoid excessive API calls
 
+	// Get repository metadata for stars/forks
+	repoData, err := client.GetRepository(ctx, repo.Owner, repo.Name)
+	if err != nil {
+		return models.AnalyzerResult{Name: a.Name()}, err
+	}
+
 	commits, err := client.ListCommitsSince(ctx, repo.Owner, repo.Name, cfg.Since)
 	if err != nil {
 		return models.AnalyzerResult{Name: a.Name()}, err
@@ -36,18 +42,46 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		dailyVelocity = totalCommits / days
 	}
 
-	// Bus Factor Calculation
+	// Bus Factor Calculation & New Contributor Detection
 	authorCounts := make(map[string]int)
+	firstSeen := make(map[string]time.Time)
+
 	for _, c := range commits {
+		var author string
+		commitTime := cfg.Since
+
+		if c.Commit != nil && c.Commit.Author != nil && c.Commit.Author.Date != nil {
+			commitTime = c.Commit.Author.Date.Time
+		}
+
 		if c.Author != nil && c.Author.Login != nil {
-			authorCounts[*c.Author.Login]++
+			author = *c.Author.Login
 		} else if c.Commit != nil && c.Commit.Author != nil && c.Commit.Author.Name != nil {
-			// Fallback to git author name if github user is missing
-			authorCounts[*c.Commit.Author.Name]++
+			author = *c.Commit.Author.Name
+		}
+
+		if author != "" {
+			authorCounts[author]++
+			if _, exists := firstSeen[author]; !exists {
+				firstSeen[author] = commitTime
+			}
+		}
+	}
+
+	// Count new contributors
+	newContributors := 0
+	for author, firstCommit := range firstSeen {
+		if authorCounts[author] == 1 && firstCommit.After(cfg.Since) {
+			newContributors++
 		}
 	}
 
 	busFactor, topAuthors := calculateBusFactor(authorCounts, int(totalCommits))
+
+	// Star and Fork metrics
+	stars := repoData.GetStargazersCount()
+	forks := repoData.GetForksCount()
+	watchers := repoData.GetWatchersCount()
 
 	metrics := []models.Metric{
 		{
@@ -77,6 +111,34 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 			Unit:         "count",
 			DisplayValue: fmt.Sprintf("%d", len(authorCounts)),
 			Description:  "Total distinct authors",
+		},
+		{
+			Key:          "new_contributors",
+			Value:        float64(newContributors),
+			Unit:         "count",
+			DisplayValue: fmt.Sprintf("%d", newContributors),
+			Description:  "Contributors with first commit in window",
+		},
+		{
+			Key:          "stars",
+			Value:        float64(stars),
+			Unit:         "count",
+			DisplayValue: fmt.Sprintf("%d", stars),
+			Description:  "Total repository stars",
+		},
+		{
+			Key:          "forks",
+			Value:        float64(forks),
+			Unit:         "count",
+			DisplayValue: fmt.Sprintf("%d", forks),
+			Description:  "Total repository forks",
+		},
+		{
+			Key:          "watchers",
+			Value:        float64(watchers),
+			Unit:         "count",
+			DisplayValue: fmt.Sprintf("%d", watchers),
+			Description:  "Repository watchers",
 		},
 	}
 

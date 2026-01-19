@@ -41,6 +41,7 @@ type Client interface {
 
 	// Tier 3 additions
 	GetIssues(ctx context.Context, owner, repo string, opts *github.IssueListByRepoOptions) ([]*github.Issue, error)
+	GetIssueComments(ctx context.Context, owner, repo string, number int, opts *github.IssueListCommentsOptions) ([]*github.IssueComment, error)
 
 	// Tier 4 additions
 	GetWorkflowRuns(ctx context.Context, owner, repo string, opts *github.ListWorkflowRunsOptions) (*github.WorkflowRuns, *github.Response, error)
@@ -48,4 +49,7 @@ type Client interface {
 	// Tier 5 additions (Org Level)
 	ListRepositories(ctx context.Context, org string, opts *github.RepositoryListByOrgOptions) ([]*github.Repository, error)
 	GetPullRequest(ctx context.Context, owner, repo string, number int) (*github.PullRequest, error)
+
+	// GetUnderlyingClient exposes the raw GitHub client for advanced operations not yet abstracted
+	GetUnderlyingClient() *github.Client
 }

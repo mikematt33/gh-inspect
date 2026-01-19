@@ -44,6 +44,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		{"README.md", models.SeverityMedium, 10, false},
 		{"CONTRIBUTING.md", models.SeverityLow, 5, false},
 		{"SECURITY.md", models.SeverityMedium, 15, false},
+		{"CODE_OF_CONDUCT.md", models.SeverityLow, 5, false},
 		{".github/CODEOWNERS", models.SeverityLow, 5, false},
 	}
 
@@ -56,9 +57,15 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 			continue
 		}
 
-		// Common alternative locations (e.g. docs/ or .github/ for SECURITY.md)
+		// Common alternative locations
 		if f.Path == "SECURITY.md" {
 			_, _, err := client.GetContent(ctx, repo.Owner, repo.Name, ".github/SECURITY.md")
+			if err == nil {
+				f.Found = true
+			}
+		}
+		if f.Path == "CODE_OF_CONDUCT.md" {
+			_, _, err := client.GetContent(ctx, repo.Owner, repo.Name, ".github/CODE_OF_CONDUCT.md")
 			if err == nil {
 				f.Found = true
 			}
@@ -126,6 +133,71 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		Unit:         "points",
 		DisplayValue: fmt.Sprintf("%d/100", healthScore),
 		Description:  "Calculated repo health score based on files and CI",
+	})
+
+	// 4. Check Branch Protection
+	protection, _, protErr := client.GetUnderlyingClient().Repositories.GetBranchProtection(ctx, repo.Owner, repo.Name, defaultBranch)
+	if protErr == nil && protection != nil {
+		metrics = append(metrics, models.Metric{
+			Key:          "branch_protection_enabled",
+			Value:        1,
+			DisplayValue: "Yes",
+			Description:  "Branch protection rules configured",
+		})
+		if protection.RequiredPullRequestReviews != nil {
+			metrics = append(metrics, models.Metric{
+				Key:          "requires_pr_reviews",
+				Value:        1,
+				DisplayValue: "Yes",
+				Description:  "Requires PR reviews before merge",
+			})
+		}
+		if protection.RequiredStatusChecks != nil {
+			metrics = append(metrics, models.Metric{
+				Key:          "requires_status_checks",
+				Value:        1,
+				DisplayValue: "Yes",
+				Description:  "Requires status checks to pass",
+			})
+		}
+	} else {
+		metrics = append(metrics, models.Metric{
+			Key:          "branch_protection_enabled",
+			Value:        0,
+			DisplayValue: "No",
+			Description:  "No branch protection configured",
+		})
+		healthScore -= 15
+		findings = append(findings, models.Finding{
+			Type:        "no_branch_protection",
+			Severity:    models.SeverityMedium,
+			Message:     fmt.Sprintf("No branch protection on %s", defaultBranch),
+			Actionable:  true,
+			Remediation: "Enable branch protection rules.",
+		})
+	}
+
+	// 5. Check dependency files
+	depFiles := []string{"package.json", "requirements.txt", "pom.xml", "build.gradle", "go.mod", "Cargo.toml", "Gemfile"}
+	depFound := false
+	for _, df := range depFiles {
+		if _, _, err := client.GetContent(ctx, repo.Owner, repo.Name, df); err == nil {
+			depFound = true
+			break
+		}
+	}
+	metrics = append(metrics, models.Metric{
+		Key:          "has_dependency_management",
+		Value:        map[bool]float64{true: 1, false: 0}[depFound],
+		DisplayValue: map[bool]string{true: "Yes", false: "No"}[depFound],
+		Description:  "Uses dependency management",
+	})
+
+	// Add default branch metric
+	metrics = append(metrics, models.Metric{
+		Key:          "default_branch",
+		DisplayValue: defaultBranch,
+		Description:  "Default branch name",
 	})
 
 	return models.AnalyzerResult{
