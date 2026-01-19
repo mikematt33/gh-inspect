@@ -83,6 +83,10 @@ gh-inspect auth
 gh-inspect auth login   # Log in
 gh-inspect auth status  # Check authentication status
 gh-inspect auth logout  # Remove stored token
+
+# For servers without a browser (uses device code flow)
+gh-inspect auth --no-browser
+gh-inspect auth login --no-browser
 ```
 
 #### `run` - Analyze Repositories

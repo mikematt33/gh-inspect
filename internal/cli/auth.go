@@ -16,6 +16,10 @@ import (
 	"golang.org/x/term"
 )
 
+var (
+	flagNoBrowser bool
+)
+
 var authCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Authenticate with GitHub",
@@ -53,6 +57,10 @@ func init() {
 	authCmd.AddCommand(authLoginCmd)
 	authCmd.AddCommand(authStatusCmd)
 	authCmd.AddCommand(authLogoutCmd)
+
+	// Add flags
+	authCmd.PersistentFlags().BoolVar(&flagNoBrowser, "no-browser", false, "Disable browser-based authentication (use device code flow)")
+	authLoginCmd.Flags().BoolVar(&flagNoBrowser, "no-browser", false, "Disable browser-based authentication (use device code flow)")
 
 	// Make login the default subcommand behavior when no subcommand is specified
 	authCmd.Run = runAuth
@@ -97,8 +105,15 @@ func loginWithGh() {
 	}
 
 	// Run login
-	fmt.Println("Running 'gh auth login'...")
-	cmd = exec.Command("gh", "auth", "login")
+	var loginArgs []string
+	if flagNoBrowser {
+		fmt.Println("Running 'gh auth login --web' (device code flow)...")
+		loginArgs = []string{"auth", "login", "--web"}
+	} else {
+		fmt.Println("Running 'gh auth login'...")
+		loginArgs = []string{"auth", "login"}
+	}
+	cmd = exec.Command("gh", loginArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
