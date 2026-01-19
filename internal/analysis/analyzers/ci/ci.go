@@ -38,10 +38,9 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	}
 
 	// We might need to page to get all runs in window
-	// For simplicity in this iteration, let's just get the first page (up to 100 runs) or loop a few times.
-	// Users with massive CI churn might exceed this, but it's a start.
-
+	// Users can have many CI runs, so we'll fetch up to a reasonable limit
 	var allRuns []*github.WorkflowRun
+	maxRuns := 5000 // Increased limit to capture more data
 	for {
 		runs, resp, err := client.GetWorkflowRuns(ctx, repo.Owner, repo.Name, opts)
 		if err != nil {
@@ -50,7 +49,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 
 		allRuns = append(allRuns, runs.WorkflowRuns...)
 
-		if resp.NextPage == 0 || len(allRuns) >= 500 { // Limit to 500 runs to avoid hitting limits hard
+		if resp.NextPage == 0 || len(allRuns) >= maxRuns {
 			break
 		}
 		opts.Page = resp.NextPage
@@ -65,6 +64,8 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		totalRuns            int
 		successCount         int
 		failureCount         int
+		cancelledCount       int
+		skippedCount         int
 		totalDuration        time.Duration
 		workflowCounts       = make(map[string]int)
 		workflowSuccess      = make(map[string]int)
@@ -84,7 +85,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		workflowCounts[wfName]++
 
 		conclusion := run.GetConclusion()
-		// statuses: success, failure, neutral, cancelled, timed_out, action_required
+		// statuses: success, failure, neutral, cancelled, timed_out, action_required, skipped
 
 		switch conclusion {
 		case "success":
@@ -106,6 +107,10 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		case "failure", "timed_out", "startup_failure":
 			failureCount++
 			workflowFail[wfName]++
+		case "cancelled":
+			cancelledCount++
+		case "skipped", "neutral":
+			skippedCount++
 		}
 	}
 
@@ -124,6 +129,30 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		Key:          "workflow_runs_total",
 		Value:        float64(totalRuns),
 		DisplayValue: fmt.Sprintf("%d", totalRuns),
+	})
+
+	result.Metrics = append(result.Metrics, models.Metric{
+		Key:          "unique_workflows",
+		Value:        float64(len(workflowCounts)),
+		DisplayValue: fmt.Sprintf("%d", len(workflowCounts)),
+	})
+
+	result.Metrics = append(result.Metrics, models.Metric{
+		Key:          "success_count",
+		Value:        float64(successCount),
+		DisplayValue: fmt.Sprintf("%d", successCount),
+	})
+
+	result.Metrics = append(result.Metrics, models.Metric{
+		Key:          "failure_count",
+		Value:        float64(failureCount),
+		DisplayValue: fmt.Sprintf("%d", failureCount),
+	})
+
+	result.Metrics = append(result.Metrics, models.Metric{
+		Key:          "cancelled_count",
+		Value:        float64(cancelledCount),
+		DisplayValue: fmt.Sprintf("%d", cancelledCount),
 	})
 
 	result.Metrics = append(result.Metrics, models.Metric{
