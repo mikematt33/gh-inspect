@@ -24,7 +24,10 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	var findings []models.Finding
 
 	// Note: These APIs require GitHub Advanced Security or public repos
-	// Gracefully handle permission errors
+	// Track if we encountered permission/availability errors
+	dependabotAvailable := false
+	secretScanningAvailable := false
+	codeScanningAvailable := false
 
 	// 1. Dependabot Alerts
 	state := "open"
@@ -38,6 +41,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	lowCount := 0
 
 	if err == nil {
+		dependabotAvailable = true
 		for _, alert := range dependabotAlerts {
 			severity := alert.SecurityAdvisory.GetSeverity()
 			switch severity {
@@ -88,6 +92,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	})
 
 	if err == nil {
+		secretScanningAvailable = true
 		metrics = append(metrics, models.Metric{
 			Key:          "secret_scanning_alerts",
 			Value:        float64(len(secretAlerts)),
@@ -112,6 +117,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	})
 
 	if err == nil {
+		codeScanningAvailable = true
 		metrics = append(metrics, models.Metric{
 			Key:          "code_scanning_alerts",
 			Value:        float64(len(codeAlerts)),
@@ -120,14 +126,27 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		})
 	}
 
-	// If no security features are available, add a note
-	if len(metrics) == 0 {
-		metrics = append(metrics, models.Metric{
-			Key:          "security_features_enabled",
-			Value:        0,
-			DisplayValue: "No",
-			Description:  "GitHub security features not available or not enabled",
-		})
+	// Add summary metric about security features availability
+	securityFeaturesCount := 0
+	if dependabotAvailable {
+		securityFeaturesCount++
+	}
+	if secretScanningAvailable {
+		securityFeaturesCount++
+	}
+	if codeScanningAvailable {
+		securityFeaturesCount++
+	}
+
+	metrics = append(metrics, models.Metric{
+		Key:          "security_features_available",
+		Value:        float64(securityFeaturesCount),
+		DisplayValue: fmt.Sprintf("%d/3", securityFeaturesCount),
+		Description:  "GitHub security features available (Dependabot, Secret Scanning, Code Scanning)",
+	})
+
+	// If no security features are available, add a finding
+	if securityFeaturesCount == 0 {
 		findings = append(findings, models.Finding{
 			Type:        "security_not_enabled",
 			Severity:    models.SeverityMedium,

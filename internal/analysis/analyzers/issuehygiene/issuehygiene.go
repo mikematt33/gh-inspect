@@ -147,16 +147,20 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	}
 
 	// Calculate Time to First Response (sample to avoid excessive API calls)
+	// Sample from all issues (both open and closed) to get representative metrics
+	allIssues := append([]*github.Issue{}, openIssues...)
+	allIssues = append(allIssues, closedIssues...)
+	
 	sampleLimit := 10
 	if cfg.IncludeDeep {
 		sampleLimit = 30
 	}
-	if len(closedIssues) < sampleLimit {
-		sampleLimit = len(closedIssues)
+	if len(allIssues) < sampleLimit {
+		sampleLimit = len(allIssues)
 	}
 
 	for i := 0; i < sampleLimit; i++ {
-		issue := closedIssues[i]
+		issue := allIssues[i]
 		comments, err := client.GetIssueComments(ctx, repo.Owner, repo.Name, issue.GetNumber(), nil)
 		if err == nil && len(comments) > 0 {
 			firstComment := comments[0]

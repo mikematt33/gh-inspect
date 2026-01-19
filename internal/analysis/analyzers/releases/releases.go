@@ -32,10 +32,15 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		return models.AnalyzerResult{Name: a.Name()}, err
 	}
 
-	// Filter releases since cfg.Since
+	// Filter releases since cfg.Since using PublishedAt (or CreatedAt as fallback)
 	var recentReleases []*github.RepositoryRelease
 	for _, release := range allReleases {
-		if release.CreatedAt.After(cfg.Since) {
+		// Use PublishedAt if available, otherwise fall back to CreatedAt
+		releaseTime := release.GetPublishedAt()
+		if releaseTime.IsZero() {
+			releaseTime = release.GetCreatedAt()
+		}
+		if releaseTime.After(cfg.Since) {
 			recentReleases = append(recentReleases, release)
 		}
 	}
