@@ -18,8 +18,6 @@ var _ analysis.Client = (*ClientWrapper)(nil)
 // ClientWrapper adapts the google/go-github client to the analysis.Client interface.
 type ClientWrapper struct {
 	client *github.Client
-	// Client exposes the underlying GitHub client for advanced usage
-	Client *github.Client
 }
 
 // ResolveToken attempts to find a GitHub token from:
@@ -56,7 +54,6 @@ func NewClient(token string) *ClientWrapper {
 
 	return &ClientWrapper{
 		client: ghClient,
-		Client: ghClient, // Expose for external usage
 	}
 }
 

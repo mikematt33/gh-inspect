@@ -47,6 +47,8 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	now := time.Now()
 
 	// Check each branch for staleness (limit to first 50 to avoid rate limits)
+	// Note: This only samples up to the first 50 branches. Repositories with more branches
+	// may have additional stale branches not detected by this analyzer.
 	limit := 50
 	if len(branches) < limit {
 		limit = len(branches)
@@ -84,7 +86,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		Key:          "stale_branches",
 		Value:        float64(staleBranches),
 		DisplayValue: fmt.Sprintf("%d", staleBranches),
-		Description:  fmt.Sprintf("Branches inactive > %d days", a.StaleThresholdDays),
+		Description:  fmt.Sprintf("Branches inactive > %d days (sampled from first %d branches)", a.StaleThresholdDays, limit),
 	})
 
 	// Findings

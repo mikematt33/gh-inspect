@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -96,13 +97,16 @@ func saveHistory(history *recentHistory) error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }
 
 // recordUsage records that an item was used
 func recordUsage(value, itemType string) {
 	history, err := loadHistory()
 	if err != nil {
+		if shouldPrintVerbose() {
+			fmt.Fprintf(os.Stderr, "Warning: failed to load completion history: %v\n", err)
+		}
 		return // Silently fail on history tracking errors
 	}
 
@@ -126,7 +130,10 @@ func recordUsage(value, itemType string) {
 		})
 	}
 
-	saveHistory(history)
+	err = saveHistory(history)
+	if err != nil && shouldPrintVerbose() {
+		fmt.Fprintf(os.Stderr, "Warning: failed to save completion history: %v\n", err)
+	}
 }
 
 // getRecentItems returns recent items of a specific type, sorted by frequency and recency
@@ -202,7 +209,7 @@ func completeOrganizations(cmd *cobra.Command, args []string, toComplete string)
 		client, err := getClientWithToken(cfg)
 		if err == nil {
 			// Get user's organizations
-			orgs, _, err := client.Client.Organizations.List(context.Background(), "", nil)
+			orgs, _, err := client.GetUnderlyingClient().Organizations.List(context.Background(), "", nil)
 			if err == nil {
 				for _, org := range orgs {
 					if org.Login != nil {
@@ -256,7 +263,7 @@ func completeUsers(cmd *cobra.Command, args []string, toComplete string) ([]stri
 	if err == nil && cfg.Global.GitHubToken != "" {
 		client, err := getClientWithToken(cfg)
 		if err == nil {
-			user, _, err := client.Client.Users.Get(context.Background(), "")
+			user, _, err := client.GetUnderlyingClient().Users.Get(context.Background(), "")
 			if err == nil && user.Login != nil {
 				// Add authenticated user at the beginning
 				suggestions = append([]string{*user.Login}, suggestions...)
