@@ -153,6 +153,7 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	// Handle interrupt signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
 	go func() {
 		<-sigChan
 		fmt.Fprintln(os.Stderr, "\n⚠️  Received interrupt signal. Cancelling analysis...")

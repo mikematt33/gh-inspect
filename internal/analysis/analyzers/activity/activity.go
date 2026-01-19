@@ -70,8 +70,8 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 
 	// Count new contributors
 	newContributors := 0
-	for author, firstCommit := range firstSeen {
-		if authorCounts[author] == 1 && firstCommit.After(cfg.Since) {
+	for _, firstCommit := range firstSeen {
+		if firstCommit.After(cfg.Since) {
 			newContributors++
 		}
 	}

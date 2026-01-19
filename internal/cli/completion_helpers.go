@@ -96,7 +96,7 @@ func saveHistory(history *recentHistory) error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }
 
 // recordUsage records that an item was used

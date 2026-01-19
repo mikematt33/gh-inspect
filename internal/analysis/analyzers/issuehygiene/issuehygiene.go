@@ -110,15 +110,22 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		}
 
 		// Bug vs Feature classification
+		isBugIssue := false
+		isFeatureIssue := false
 		for _, label := range issue.Labels {
 			labelName := strings.ToLower(label.GetName())
 			if strings.Contains(labelName, "bug") {
-				bugCount++
-				break
-			} else if strings.Contains(labelName, "feature") || strings.Contains(labelName, "enhancement") {
-				featureCount++
-				break
+				isBugIssue = true
 			}
+			if strings.Contains(labelName, "feature") || strings.Contains(labelName, "enhancement") {
+				isFeatureIssue = true
+			}
+		}
+		if isBugIssue {
+			bugCount++
+		}
+		if isFeatureIssue {
+			featureCount++
 		}
 	}
 
