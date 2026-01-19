@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -48,7 +49,7 @@ var authStatusCmd = &cobra.Command{
 var authLogoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "Log out from GitHub",
-	Long:  "Remove the stored GitHub token from your configuration.",
+	Long:  "Remove stored GitHub tokens from configuration file and shell rc files (.bashrc, .zshrc, etc.).",
 	Run:   runAuthLogout,
 }
 
@@ -61,14 +62,62 @@ func init() {
 	// Add flags
 	authCmd.PersistentFlags().BoolVar(&flagNoBrowser, "no-browser", false, "Disable browser-based authentication (use device code flow)")
 	authLoginCmd.Flags().BoolVar(&flagNoBrowser, "no-browser", false, "Disable browser-based authentication (use device code flow)")
-
-	// Make login the default subcommand behavior when no subcommand is specified
-	authCmd.Run = runAuth
 }
 
 func runAuth(cmd *cobra.Command, args []string) {
+	fmt.Println("GitHub Authentication Status")
+	fmt.Println("----------------------------")
+
+	// Check for existing authentication
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Printf("⚠️  Error loading config: %v\n", err)
+		cfg = nil
+	}
+
+	var configToken string
+	if cfg != nil {
+		configToken = cfg.Global.GitHubToken
+	}
+
+	token := ghclient.ResolveToken(configToken)
+	if token != "" {
+		fmt.Println("✅ You are already authenticated!")
+		fmt.Println()
+		fmt.Println()
+
+		// Show where the token is from
+		if configToken != "" && configToken == token {
+			fmt.Println("Token source: Config file")
+		} else if checkGhCLIToken() {
+			fmt.Println("Token source: GitHub CLI (gh)")
+		} else {
+			fmt.Println("Token source: GITHUB_TOKEN environment variable")
+		}
+
+		// Validate the token
+		if err := validateToken(token); err != nil {
+			fmt.Printf("⚠️  Current token is invalid: %v\n", err)
+			fmt.Println()
+		} else {
+			fmt.Println("Token status: Valid")
+			fmt.Println()
+		}
+		fmt.Println()
+
+		if !promptYesNo("Do you want to change your authentication?") {
+			fmt.Println()
+			fmt.Println("\nNo changes made.")
+			return
+		}
+		fmt.Println()
+	}
+
+	// Start new authentication flow
 	fmt.Println("Authenticate with GitHub")
 	fmt.Println("------------------------")
+	fmt.Println()
+	fmt.Println()
 
 	// Check if 'gh' is available
 	ghPath, err := exec.LookPath("gh")
@@ -78,11 +127,18 @@ func runAuth(cmd *cobra.Command, args []string) {
 			loginWithGh()
 			return
 		}
+		fmt.Println()
 	} else {
+		fmt.Println()
 		fmt.Println("GitHub CLI (gh) not found.")
 	}
 
 	loginWithToken()
+}
+
+func checkGhCLIToken() bool {
+	cmd := exec.Command("gh", "auth", "token")
+	return cmd.Run() == nil
 }
 
 func loginWithGh() {
@@ -193,27 +249,143 @@ func saveToken(token string) {
 		return
 	}
 
+	fmt.Println()
 	fmt.Println("✅ Token validated successfully!")
+
+	// Ask user where to store the token
+	chooseTokenStorage(token)
+}
+
+func chooseTokenStorage(token string) {
+	fmt.Println("How would you like to store your GitHub token?")
+	fmt.Println()
+	fmt.Println("1. Temporary (export for current session only)")
+	fmt.Println("2. Persistent shell (add to .bashrc/.zshrc)")
+	fmt.Println("3. Config file (store in gh-inspect config)")
+	fmt.Println("4. Don't store (I'll use gh CLI or GITHUB_TOKEN)")
+	fmt.Println()
+	fmt.Print("Enter choice [1-4]: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	choice, _ := reader.ReadString('\n')
+	choice = strings.TrimSpace(choice)
+
+	switch choice {
+	case "1":
+		storeTokenTemporary(token)
+	case "2":
+		storeTokenPersistentShell(token)
+	case "3":
+		storeTokenConfig(token)
+	case "4":
+		fmt.Println("\n✅ Token validated but not stored.")
+		fmt.Println("💡 Use 'export GITHUB_TOKEN=\"your_token\"' or 'gh auth login' to authenticate.")
+	default:
+		fmt.Println("\n❌ Invalid choice. Token not stored.")
+	}
+}
+
+func storeTokenTemporary(token string) {
+	fmt.Println("\n✅ To use this token temporarily, run:")
+	fmt.Println()
+	fmt.Printf("  export GITHUB_TOKEN=\"%s\"\n", token)
+	fmt.Println()
+	fmt.Println("This will only be available in your current terminal session.")
+}
+
+func storeTokenPersistentShell(token string) {
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		fmt.Println("\n❌ Could not detect shell. Please add manually.")
+		return
+	}
+
+	shellName := filepath.Base(shell)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Printf("\n❌ Could not find home directory: %v\n", err)
+		return
+	}
+
+	var targetFile string
+	switch shellName {
+	case "bash":
+		targetFile = filepath.Join(home, ".bashrc")
+	case "zsh":
+		targetFile = filepath.Join(home, ".zshrc")
+	default:
+		fmt.Printf("\n⚠️  Shell '%s' not directly supported. Add this line to your shell config:\n", shellName)
+		fmt.Printf("  export GITHUB_TOKEN=\"%s\"\n", token)
+		return
+	}
+
+	fmt.Printf("\nThis will add 'export GITHUB_TOKEN=...' to %s\n", targetFile)
+	fmt.Println("⚠️  WARNING: This stores the token in plain text in your shell config.")
+
+	if !promptYesNo("Continue?") {
+		fmt.Println("Aborted.")
+		return
+	}
+
+	// Read existing content to check for duplicates
+	content, _ := os.ReadFile(targetFile)
+	existingContent := string(content)
+
+	if strings.Contains(existingContent, "GITHUB_TOKEN=") {
+		fmt.Println("\n⚠️  Found existing GITHUB_TOKEN in file. Replacing...")
+
+		// Remove old GITHUB_TOKEN lines
+		lines := strings.Split(existingContent, "\n")
+		var newLines []string
+		for _, line := range lines {
+			if !strings.Contains(line, "GITHUB_TOKEN=") {
+				newLines = append(newLines, line)
+			}
+		}
+		existingContent = strings.Join(newLines, "\n")
+	}
+
+	// Append new token
+	f, err := os.OpenFile(targetFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		fmt.Printf("\n❌ Failed to open file: %v\n", err)
+		return
+	}
+	defer func() { _ = f.Close() }()
+
+	_, _ = fmt.Fprintf(f, "%s\n# GitHub token for gh-inspect\nexport GITHUB_TOKEN=\"%s\"\n", existingContent, token)
+
+	fmt.Println("\n✅ Token added to shell configuration.")
+	fmt.Printf("🔄 Restart your terminal or run 'source %s' to activate.\n", targetFile)
+}
+
+func storeTokenConfig(token string) {
+	fmt.Println("\n⚠️  WARNING: Storing token in config file as plain text.")
+	fmt.Println("Consider using 'gh auth login' or environment variables for better security.")
+
+	if !promptYesNo("\nContinue with config file storage?") {
+		fmt.Println("Aborted.")
+		return
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Printf("Error loading config: %v\n", err)
+		fmt.Printf("\n❌ Error loading config: %v\n", err)
 		return
 	}
 
 	if cfg == nil {
-		// Should not happen with Load(), but safety check
-		fmt.Println("Error: Config structure nil")
+		fmt.Println("\n❌ Error: Config structure nil")
 		return
 	}
 
 	cfg.Global.GitHubToken = token
 	if err := saveConfig(cfg); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
+		fmt.Printf("\n❌ Failed to save config: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Println("✅ Token saved successfully to configuration.")
+	fmt.Println("\n✅ Token saved to configuration file.")
 }
 
 func promptYesNo(question string) bool {
@@ -272,7 +444,17 @@ func runAuthStatus(cmd *cobra.Command, args []string) {
 	fmt.Println("✅ Authenticated")
 	fmt.Printf("   Rate limit: %d/%d remaining\n", limits.Remaining, limits.Limit)
 	if !limits.Reset.IsZero() {
-		fmt.Printf("   Resets at: %s\n", limits.Reset.Format(time.RFC3339))
+		// Calculate time until reset
+		timeUntilReset := time.Until(limits.Reset.Time)
+		var humanReadable string
+		if timeUntilReset < time.Minute {
+			humanReadable = fmt.Sprintf("in %d seconds", int(timeUntilReset.Seconds()))
+		} else if timeUntilReset < time.Hour {
+			humanReadable = fmt.Sprintf("in %d minutes", int(timeUntilReset.Minutes()))
+		} else {
+			humanReadable = fmt.Sprintf("in %.1f hours", timeUntilReset.Hours())
+		}
+		fmt.Printf("   Resets at: %s (%s)\n", limits.Reset.Format(time.RFC3339), humanReadable)
 	}
 
 	// Show token source
@@ -284,30 +466,115 @@ func runAuthStatus(cmd *cobra.Command, args []string) {
 }
 
 func runAuthLogout(cmd *cobra.Command, args []string) {
+	fmt.Println("GitHub Authentication Logout")
+	fmt.Println("---------------------------")
+	fmt.Println()
+
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Printf("❌ Error loading config: %v\n", err)
 		os.Exit(1)
 	}
 
-	if cfg.Global.GitHubToken == "" {
-		fmt.Println("No token stored in configuration file.")
-		fmt.Println("\nNote: If you're using GITHUB_TOKEN environment variable or gh CLI,")
-		fmt.Println("you'll need to clear those separately.")
+	// Check all possible token locations
+	var foundLocations []string
+	hasConfigToken := cfg.Global.GitHubToken != ""
+
+	if hasConfigToken {
+		foundLocations = append(foundLocations, "config file")
+	}
+
+	// Check for GITHUB_TOKEN in environment
+	if os.Getenv("GITHUB_TOKEN") != "" {
+		foundLocations = append(foundLocations, "GITHUB_TOKEN environment variable")
+	}
+
+	// Check for token in shell rc files
+	homeDir, _ := os.UserHomeDir()
+	shellFiles := []string{".bashrc", ".zshrc", ".bash_profile", ".profile"}
+	var foundShellFiles []string
+	for _, shellFile := range shellFiles {
+		targetFile := filepath.Join(homeDir, shellFile)
+		content, err := os.ReadFile(targetFile)
+		if err == nil && strings.Contains(string(content), "GITHUB_TOKEN=") {
+			foundShellFiles = append(foundShellFiles, shellFile)
+			foundLocations = append(foundLocations, shellFile)
+		}
+	}
+
+	// Check gh CLI
+	if checkGhCLIToken() {
+		foundLocations = append(foundLocations, "gh CLI")
+	}
+
+	if len(foundLocations) == 0 {
+		fmt.Println("❌ No stored tokens found.")
 		return
 	}
 
+	fmt.Println("Found tokens in the following locations:")
+	for i, loc := range foundLocations {
+		fmt.Printf("  %d. %s\n", i+1, loc)
+	}
+	fmt.Println()
+
 	// Confirm logout
-	if !promptYesNo("Are you sure you want to remove the stored token?") {
+	if !promptYesNo("Do you want to remove these tokens?") {
 		fmt.Println("Logout cancelled.")
 		return
 	}
+	fmt.Println()
 
-	cfg.Global.GitHubToken = ""
-	if err := saveConfig(cfg); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
-		os.Exit(1)
+	// Remove from config
+	if hasConfigToken {
+		cfg.Global.GitHubToken = ""
+		if err := saveConfig(cfg); err != nil {
+			fmt.Printf("❌ Failed to save config: %v\n", err)
+		} else {
+			fmt.Println("✅ Removed token from config file")
+		}
 	}
 
-	fmt.Println("✅ Successfully logged out. Token removed from configuration.")
+	// Remove from shell rc files
+	for _, shellFile := range foundShellFiles {
+		targetFile := filepath.Join(homeDir, shellFile)
+		content, err := os.ReadFile(targetFile)
+		if err != nil {
+			fmt.Printf("❌ Failed to read %s: %v\n", shellFile, err)
+			continue
+		}
+
+		// Remove GITHUB_TOKEN lines
+		lines := strings.Split(string(content), "\n")
+		var newLines []string
+		for _, line := range lines {
+			if !strings.Contains(line, "GITHUB_TOKEN=") && !strings.Contains(line, "# GitHub token for gh-inspect") {
+				newLines = append(newLines, line)
+			}
+		}
+
+		err = os.WriteFile(targetFile, []byte(strings.Join(newLines, "\n")), 0644)
+		if err != nil {
+			fmt.Printf("❌ Failed to update %s: %v\n", shellFile, err)
+		} else {
+			fmt.Printf("✅ Removed token from %s\n", shellFile)
+		}
+	}
+
+	// Provide instructions for other locations
+	if os.Getenv("GITHUB_TOKEN") != "" {
+		fmt.Println()
+		fmt.Println("⚠️  GITHUB_TOKEN environment variable is set in your current session.")
+		fmt.Println("   To remove it, run: unset GITHUB_TOKEN")
+		fmt.Println("   (This will only affect the current terminal session)")
+	}
+
+	if checkGhCLIToken() {
+		fmt.Println()
+		fmt.Println("⚠️  GitHub CLI (gh) is authenticated.")
+		fmt.Println("   To log out, run: gh auth logout")
+	}
+
+	fmt.Println()
+	fmt.Println("✅ Logout complete.")
 }
