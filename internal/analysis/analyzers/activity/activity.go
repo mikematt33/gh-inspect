@@ -2,11 +2,12 @@ package activity
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
+	"github.com/google/go-github/v60/github"
 	"github.com/mikematt33/gh-inspect/internal/analysis"
 	"github.com/mikematt33/gh-inspect/pkg/models"
 )
@@ -35,8 +36,10 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 
 	commits, err := client.ListCommitsSince(ctx, repo.Owner, repo.Name, cfg.Since)
 	if err != nil {
-		// Check if this is an empty repository error (409)
-		if strings.Contains(err.Error(), "409") && strings.Contains(err.Error(), "empty") {
+		// Check if this is an empty repository error
+		// GitHub returns 409 Conflict for empty repositories
+		var ghErr *github.ErrorResponse
+		if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 409 {
 			// Return empty metrics for empty repos instead of failing
 			result.Metrics = append(result.Metrics, models.Metric{
 				Key:          "commits_total",

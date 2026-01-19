@@ -118,7 +118,9 @@ func TestPromptYesNo(t *testing.T) {
 	}
 }
 
-func SkipTestSaveToken(t *testing.T) {
+func TestSaveToken(t *testing.T) {
+	t.Skip("Skipped: Test requires interactive user input and file system modifications that are not suitable for automated testing")
+
 	// Save original validator
 	originalValidateToken := validateToken
 	defer func() { validateToken = originalValidateToken }()

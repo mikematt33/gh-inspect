@@ -182,7 +182,7 @@ func runAutoCompletion() {
 			}
 		}
 
-		if oldCommand != "" && oldCommand != commandToAppend {
+		if oldCommand != "" && strings.TrimSpace(oldCommand) != strings.TrimSpace(commandToAppend) {
 			fmt.Println("🔄 Detected outdated completion command. Will replace with updated version.")
 
 			// Replace the old command with the new one
