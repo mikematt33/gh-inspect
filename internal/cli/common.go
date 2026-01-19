@@ -225,9 +225,7 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 			progressbar.OptionShowIts(),
 			progressbar.OptionSetItsString("repos"),
 			progressbar.OptionThrottle(100*time.Millisecond),
-			progressbar.OptionOnCompletion(func() {
-				fmt.Println()
-			}),
+			progressbar.OptionClearOnFinish(),
 		)
 	}
 
