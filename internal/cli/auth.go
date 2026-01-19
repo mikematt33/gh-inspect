@@ -329,28 +329,83 @@ func storeTokenPersistentShell(token string) {
 	existingContent := string(content)
 
 	if strings.Contains(existingContent, "GITHUB_TOKEN=") {
-		fmt.Println("\n⚠️  Found existing GITHUB_TOKEN in file. Replacing...")
+		fmt.Println("\n⚠️  Found existing GITHUB_TOKEN entries in file.")
 
-		// Remove old GITHUB_TOKEN lines
+		// Remove only the gh-inspect-managed block and optionally other token lines with user confirmation
 		lines := strings.Split(existingContent, "\n")
 		var newLines []string
-		for _, line := range lines {
-			if !strings.Contains(line, "GITHUB_TOKEN=") {
-				newLines = append(newLines, line)
+
+		for i := 0; i < len(lines); i++ {
+			line := lines[i]
+			trimmed := strings.TrimSpace(line)
+
+			// Automatically remove the block previously added by gh-inspect:
+			// the marker comment and the following GITHUB_TOKEN export line
+			if trimmed == "# GitHub token for gh-inspect" {
+				if i+1 < len(lines) && strings.Contains(lines[i+1], "GITHUB_TOKEN=") {
+					i++ // skip the following export line as well
+				}
+				continue
 			}
+
+			if strings.Contains(line, "GITHUB_TOKEN=") {
+				// Preserve commented-out lines
+				if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//") {
+					newLines = append(newLines, line)
+					continue
+				}
+
+				fmt.Printf("\nFound existing GITHUB_TOKEN line:\n  %s\n", strings.TrimSpace(line))
+				if promptYesNo("Do you want to remove this line and replace it with a new token for gh-inspect?") {
+					// Skip this line (do not append), effectively removing it
+					continue
+				}
+				// User chose to keep this line
+			}
+
+			newLines = append(newLines, line)
 		}
 		existingContent = strings.Join(newLines, "\n")
 	}
 
-	// Append new token
-	f, err := os.OpenFile(targetFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	// Prepare new content with appended token
+	newContent := fmt.Sprintf("%s\n# GitHub token for gh-inspect\nexport GITHUB_TOKEN=\"%s\"\n", existingContent, token)
+
+	// Write to a temporary file first to avoid data loss on write failure
+	dir := filepath.Dir(targetFile)
+	tmpFile, err := os.CreateTemp(dir, ".gh-inspect-token-*")
 	if err != nil {
-		fmt.Printf("\n❌ Failed to open file: %v\n", err)
+		fmt.Printf("\n❌ Failed to create temporary file: %v\n", err)
 		return
 	}
-	defer func() { _ = f.Close() }()
+	tmpName := tmpFile.Name()
 
-	_, _ = fmt.Fprintf(f, "%s\n# GitHub token for gh-inspect\nexport GITHUB_TOKEN=\"%s\"\n", existingContent, token)
+	if _, err := tmpFile.WriteString(newContent); err != nil {
+		fmt.Printf("\n❌ Failed to write to temporary file: %v\n", err)
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpName)
+		return
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		fmt.Printf("\n❌ Failed to close temporary file: %v\n", err)
+		_ = os.Remove(tmpName)
+		return
+	}
+
+	// Ensure file has the desired permissions
+	if err := os.Chmod(tmpName, 0644); err != nil {
+		fmt.Printf("\n❌ Failed to set permissions on temporary file: %v\n", err)
+		_ = os.Remove(tmpName)
+		return
+	}
+
+	// Atomically replace the target file with the new content
+	if err := os.Rename(tmpName, targetFile); err != nil {
+		fmt.Printf("\n❌ Failed to replace shell configuration file: %v\n", err)
+		_ = os.Remove(tmpName)
+		return
+	}
 
 	fmt.Println("\n✅ Token added to shell configuration.")
 	fmt.Printf("🔄 Restart your terminal or run 'source %s' to activate.\n", targetFile)
@@ -541,13 +596,28 @@ func runAuthLogout(cmd *cobra.Command, args []string) {
 			continue
 		}
 
-		// Remove GITHUB_TOKEN lines
+		// Remove GITHUB_TOKEN lines that were added by gh-inspect
 		lines := strings.Split(string(content), "\n")
 		var newLines []string
-		for _, line := range lines {
-			if !strings.Contains(line, "GITHUB_TOKEN=") && !strings.Contains(line, "# GitHub token for gh-inspect") {
-				newLines = append(newLines, line)
+		for i := 0; i < len(lines); i++ {
+			line := lines[i]
+			trimmed := strings.TrimSpace(line)
+
+			// If this is our marker comment, skip it and the following export line
+			if trimmed == "# GitHub token for gh-inspect" {
+				// Skip the marker comment itself
+				// Also skip the next line if it looks like a GITHUB_TOKEN definition
+				if i+1 < len(lines) {
+					nextTrimmed := strings.TrimSpace(lines[i+1])
+					if strings.HasPrefix(nextTrimmed, "export GITHUB_TOKEN=") || strings.HasPrefix(nextTrimmed, "GITHUB_TOKEN=") {
+						i++
+					}
+				}
+				continue
 			}
+
+			// Keep all other lines, including standalone GITHUB_TOKEN exports that weren't added by gh-inspect
+			newLines = append(newLines, line)
 		}
 
 		err = os.WriteFile(targetFile, []byte(strings.Join(newLines, "\n")), 0644)
