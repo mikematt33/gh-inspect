@@ -27,7 +27,7 @@ lint:
 	@echo "Running linters..."
 	@if [ ! -f ./bin/golangci-lint ]; then \
 		echo "Installing golangci-lint to ./bin..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./bin v1.63.4; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./bin latest; \
 	fi
 	@./bin/golangci-lint run
 

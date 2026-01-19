@@ -137,7 +137,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		if issue.GetClosedAt().IsZero() {
 			continue
 		}
-		lifetime := issue.GetClosedAt().Time.Sub(issue.GetCreatedAt().Time)
+		lifetime := issue.GetClosedAt().Sub(issue.GetCreatedAt().Time)
 		totalLifetime += lifetime
 
 		// Check if issue has linked PR
@@ -150,7 +150,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	// Sample from all issues (both open and closed) to get representative metrics
 	allIssues := append([]*github.Issue{}, openIssues...)
 	allIssues = append(allIssues, closedIssues...)
-	
+
 	sampleLimit := 10
 	if cfg.IncludeDeep {
 		sampleLimit = 30

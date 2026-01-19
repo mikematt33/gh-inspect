@@ -34,7 +34,7 @@ func TestCompareCmd(t *testing.T) {
 	err := compareCmd.Execute()
 
 	// Restore stdout
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -42,11 +42,9 @@ func TestCompareCmd(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	// Basic check that something was produced
-	if output == "" {
-		// report.ComparisonTextRenderer might write something
-	}
+	_ = output
 }

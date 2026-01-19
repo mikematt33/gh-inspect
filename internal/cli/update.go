@@ -88,7 +88,7 @@ func getLatestRelease() (*Release, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned status: %v", resp.Status)
@@ -153,7 +153,7 @@ func doUpdate(version string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Download checksums file
 	fmt.Println("Downloading checksums...")
@@ -220,7 +220,7 @@ func doUpdate(version string) error {
 
 	// Atomic rename (replace)
 	if err := os.Rename(tempDst, exe); err != nil {
-		os.Remove(tempDst)
+		_ = os.Remove(tempDst)
 		return fmt.Errorf("failed to replace binary: %w", err)
 	}
 
@@ -233,7 +233,7 @@ func downloadChecksums(url string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to download checksums: %s", resp.Status)
@@ -262,7 +262,7 @@ func downloadFile(url, filepath string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to download: %s", resp.Status)
@@ -272,7 +272,7 @@ func downloadFile(url, filepath string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	_, err = io.Copy(out, resp.Body)
 	return err
@@ -284,7 +284,7 @@ func calculateSHA256(filepath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
@@ -300,13 +300,13 @@ func extractFromTarGz(archivePath, targetFile string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gzr, err := gzip.NewReader(f)
 	if err != nil {
 		return nil, err
 	}
-	defer gzr.Close()
+	defer func() { _ = gzr.Close() }()
 
 	tr := tar.NewReader(gzr)
 
@@ -338,7 +338,7 @@ func extractFromZip(archivePath, targetFile string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 
 	for _, f := range r.File {
 		if filepath.Base(f.Name) == targetFile {
@@ -346,7 +346,7 @@ func extractFromZip(archivePath, targetFile string) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			defer rc.Close()
+			defer func() { _ = rc.Close() }()
 
 			data, err := io.ReadAll(rc)
 			if err != nil {

@@ -261,7 +261,7 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 			fullReport.Repositories = append(fullReport.Repositories, repoReport)
 			completed++
 			if bar != nil {
-				bar.Add(1)
+				_ = bar.Add(1)
 			} else if shouldPrintVerbose() {
 				fmt.Printf("✓ Completed %s/%s (%d/%d repositories)\n", owner, name, completed, totalRepos)
 			}
@@ -274,7 +274,7 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 
 	// Finish progress bar
 	if bar != nil {
-		bar.Finish()
+		_ = bar.Finish()
 	}
 
 	// Check if analysis was cancelled

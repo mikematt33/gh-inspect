@@ -48,7 +48,7 @@ func TestUserCmd(t *testing.T) {
 	err := userCmd.Execute()
 
 	// Restore
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -56,7 +56,7 @@ func TestUserCmd(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if output == "" {

@@ -28,10 +28,10 @@ import (
 
 // recentItem tracks recently used items for completions
 type recentItem struct {
-	Value     string    `json:"value"`
-	LastUsed  time.Time `json:"last_used"`
-	UseCount  int       `json:"use_count"`
-	ItemType  string    `json:"type"` // "repo", "org", "user"
+	Value    string    `json:"value"`
+	LastUsed time.Time `json:"last_used"`
+	UseCount int       `json:"use_count"`
+	ItemType string    `json:"type"` // "repo", "org", "user"
 }
 
 type recentHistory struct {
@@ -174,7 +174,7 @@ func getRecentItems(itemType string, limit int) []string {
 func completeRepositories(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// Return recent repositories
 	recent := getRecentItems("repo", 20)
-	
+
 	// Filter by prefix if provided
 	if toComplete != "" {
 		var filtered []string

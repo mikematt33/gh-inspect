@@ -97,15 +97,21 @@ func startRate(r *github.Rate) *github.Rate {
 func (c *ClientWrapper) ListUserRepositories(ctx context.Context, user string, opts *github.RepositoryListOptions) ([]*github.Repository, error) {
 	var allRepos []*github.Repository
 
-	currentOpts := &github.RepositoryListOptions{
+	currentOpts := &github.RepositoryListByAuthenticatedUserOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
 	}
 	if opts != nil {
-		currentOpts = opts
+		// Copy relevant fields from opts to currentOpts
+		currentOpts.ListOptions = opts.ListOptions
+		currentOpts.Visibility = opts.Visibility
+		currentOpts.Affiliation = opts.Affiliation
+		currentOpts.Type = opts.Type
+		currentOpts.Sort = opts.Sort
+		currentOpts.Direction = opts.Direction
 	}
 
 	for {
-		repos, resp, err := c.client.Repositories.List(ctx, user, currentOpts)
+		repos, resp, err := c.client.Repositories.ListByAuthenticatedUser(ctx, currentOpts)
 		if err != nil {
 			return nil, err
 		}
@@ -119,10 +125,12 @@ func (c *ClientWrapper) ListUserRepositories(ctx context.Context, user string, o
 	}
 	return allRepos, nil
 }
+
 // GetUnderlyingClient returns the raw GitHub client for advanced operations
 func (c *ClientWrapper) GetUnderlyingClient() *github.Client {
 	return c.client
 }
+
 // GetPullRequests implements analysis.Client.
 func (c *ClientWrapper) GetPullRequests(ctx context.Context, owner, repo string, opts *github.PullRequestListOptions) ([]*github.PullRequest, error) {
 	prs, resp, err := c.client.PullRequests.List(ctx, owner, repo, opts)
@@ -203,8 +211,8 @@ func (c *ClientWrapper) GetIssues(ctx context.Context, owner, repo string, opts 
 	// GetPullRequests returns "List", ListCommitsSince auto-paginates.
 	// Let's auto-paginate here.
 
-	if opts.ListOptions.PerPage == 0 {
-		opts.ListOptions.PerPage = 100
+	if opts.PerPage == 0 {
+		opts.PerPage = 100
 	}
 
 	for {

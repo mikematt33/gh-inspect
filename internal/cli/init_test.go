@@ -12,19 +12,19 @@ func TestInitCmd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Mock XDG_CONFIG_HOME to point to tmpDir so config is written there
 	originalXDG := os.Getenv("XDG_CONFIG_HOME")
-	defer os.Setenv("XDG_CONFIG_HOME", originalXDG)
-	os.Setenv("XDG_CONFIG_HOME", tmpDir)
+	defer func() { _ = os.Setenv("XDG_CONFIG_HOME", originalXDG) }()
+	_ = os.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	// Change working directory to temp dir
 	originalWd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get current wd: %v", err)
 	}
-	defer os.Chdir(originalWd)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change wd: %v", err)

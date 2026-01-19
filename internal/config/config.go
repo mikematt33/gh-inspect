@@ -63,7 +63,7 @@ type ReleasesConfig struct {
 }
 
 type BranchesConfig struct {
-	Enabled bool          `yaml:"enabled"`
+	Enabled bool         `yaml:"enabled"`
 	Params  BranchParams `yaml:"params"`
 }
 

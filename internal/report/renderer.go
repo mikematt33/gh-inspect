@@ -44,21 +44,21 @@ type TextRenderer struct{}
 
 func (r *TextRenderer) Render(report *models.Report, w io.Writer) error {
 	if len(report.Repositories) == 0 {
-		fmt.Fprintln(w, "No repositories analyzed.")
+		_, _ = fmt.Fprintln(w, "No repositories analyzed.")
 		return nil
 	}
 
 	for _, repo := range report.Repositories {
-		fmt.Fprintf(w, "\n🔎 REPORT FOR: %s (%s)\n", repo.Name, repo.URL)
-		fmt.Fprintln(w, "==================================================")
+		_, _ = fmt.Fprintf(w, "\n🔎 REPORT FOR: %s (%s)\n", repo.Name, repo.URL)
+		_, _ = fmt.Fprintln(w, "==================================================")
 
 		if len(repo.Analyzers) == 0 {
-			fmt.Fprintln(w, "No analysis results.")
+			_, _ = fmt.Fprintln(w, "No analysis results.")
 			continue
 		}
 
 		for _, az := range repo.Analyzers {
-			fmt.Fprintf(w, "\n[ %s ]\n", az.Name)
+			_, _ = fmt.Fprintf(w, "\n[ %s ]\n", az.Name)
 
 			// 1. Metrics Table
 			if len(az.Metrics) > 0 {
@@ -68,26 +68,27 @@ func (r *TextRenderer) Render(report *models.Report, w io.Writer) error {
 					if val == "" {
 						val = fmt.Sprintf("%.2f", m.Value)
 					}
-					fmt.Fprintf(tw, "  %s:\t%s\n", m.Key, val)
+					_, _ = fmt.Fprintf(tw, "  %s:\t%s\n", m.Key, val)
 				}
-				tw.Flush()
-				fmt.Fprintln(w, "")
+				_ = tw.Flush()
+				_, _ = fmt.Fprintln(w, "")
 			}
 
 			// 2. Findings List
 			if len(az.Findings) > 0 {
-				fmt.Fprintln(w, "  Findings:")
+				_, _ = fmt.Fprintln(w, "  Findings:")
 				for _, f := range az.Findings {
 					icon := "ℹ️"
-					if f.Severity == models.SeverityHigh {
+					switch f.Severity {
+					case models.SeverityHigh:
 						icon = "🚨"
-					} else if f.Severity == models.SeverityMedium {
+					case models.SeverityMedium:
 						icon = "⚠️"
 					}
-					fmt.Fprintf(w, "    %s %s: %s\n", icon, f.Type, f.Message)
+					_, _ = fmt.Fprintf(w, "    %s %s: %s\n", icon, f.Type, f.Message)
 				}
 			} else {
-				fmt.Fprintln(w, "  No issues found.")
+				_, _ = fmt.Fprintln(w, "  No issues found.")
 			}
 		}
 
@@ -95,54 +96,55 @@ func (r *TextRenderer) Render(report *models.Report, w io.Writer) error {
 		repoInsights := insights.GenerateInsights(repo)
 		engScore := insights.CalculateEngineeringHealthScore(repo)
 
-		fmt.Fprintf(w, "\n[ opinionated-insights ]\n")
-		fmt.Fprintf(w, "  Engineering Health Score: %d/100\n", engScore)
+		_, _ = fmt.Fprintf(w, "\n[ opinionated-insights ]\n")
+		_, _ = fmt.Fprintf(w, "  Engineering Health Score: %d/100\n", engScore)
 
 		if len(repoInsights) > 0 {
-			fmt.Fprintln(w, "")
+			_, _ = fmt.Fprintln(w, "")
 			for _, ins := range repoInsights {
 				icon := "ℹ️"
-				if ins.Level == insights.LevelWarning {
+				switch ins.Level {
+				case insights.LevelWarning:
 					icon = "⚠️"
-				} else if ins.Level == insights.LevelCritical {
+				case insights.LevelCritical:
 					icon = "🚨"
 				}
-				fmt.Fprintf(w, "  %s %s: %s\n", icon, ins.Category, ins.Description)
-				fmt.Fprintf(w, "     Action: %s\n", ins.Action)
+				_, _ = fmt.Fprintf(w, "  %s %s: %s\n", icon, ins.Category, ins.Description)
+				_, _ = fmt.Fprintf(w, "     Action: %s\n", ins.Action)
 			}
 		} else {
-			fmt.Fprintln(w, "  No critical insights found.")
+			_, _ = fmt.Fprintln(w, "  No critical insights found.")
 		}
 
-		fmt.Fprintln(w, "--------------------------------------------------")
+		_, _ = fmt.Fprintln(w, "--------------------------------------------------")
 	}
 
 	// Render Summary
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "📊 ORGANIZATION SUMMARY")
-	fmt.Fprintln(w, "==================================================")
+	_, _ = fmt.Fprintln(w, "")
+	_, _ = fmt.Fprintln(w, "📊 ORGANIZATION SUMMARY")
+	_, _ = fmt.Fprintln(w, "==================================================")
 
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(tw, "Repositories Analyzed:\t%d\n", report.Summary.TotalReposAnalyzed)
-	fmt.Fprintf(tw, "Total Commits:\t%d\n", report.Summary.TotalCommits)
-	fmt.Fprintf(tw, "Total Issues Found:\t%d\n", report.Summary.IssuesFound)
-	fmt.Fprintf(tw, "Open Issues:\t%d\n", report.Summary.TotalOpenIssues)
-	fmt.Fprintf(tw, "Zombie Issues:\t%d\n", report.Summary.TotalZombieIssues)
-	fmt.Fprintf(tw, "Repos At Risk (<50):\t%d\n", report.Summary.ReposAtRisk)
-	fmt.Fprintf(tw, "Bus Factor 1 Repos:\t%d\n", report.Summary.BusFactor1Repos)
+	_, _ = fmt.Fprintf(tw, "Repositories Analyzed:\t%d\n", report.Summary.TotalReposAnalyzed)
+	_, _ = fmt.Fprintf(tw, "Total Commits:\t%d\n", report.Summary.TotalCommits)
+	_, _ = fmt.Fprintf(tw, "Total Issues Found:\t%d\n", report.Summary.IssuesFound)
+	_, _ = fmt.Fprintf(tw, "Open Issues:\t%d\n", report.Summary.TotalOpenIssues)
+	_, _ = fmt.Fprintf(tw, "Zombie Issues:\t%d\n", report.Summary.TotalZombieIssues)
+	_, _ = fmt.Fprintf(tw, "Repos At Risk (<50):\t%d\n", report.Summary.ReposAtRisk)
+	_, _ = fmt.Fprintf(tw, "Bus Factor 1 Repos:\t%d\n", report.Summary.BusFactor1Repos)
 
 	if report.Summary.AvgHealthScore > 0 {
-		fmt.Fprintf(tw, "Avg Health Score:\t%.1f/100\n", report.Summary.AvgHealthScore)
+		_, _ = fmt.Fprintf(tw, "Avg Health Score:\t%.1f/100\n", report.Summary.AvgHealthScore)
 	}
 	if report.Summary.AvgPRCycleTime > 0 {
-		fmt.Fprintf(tw, "Avg PR Cycle Time:\t%.1fh\n", report.Summary.AvgPRCycleTime)
+		_, _ = fmt.Fprintf(tw, "Avg PR Cycle Time:\t%.1fh\n", report.Summary.AvgPRCycleTime)
 	}
 	if report.Summary.AvgCISuccessRate > 0 || report.Summary.AvgHealthScore > 0 {
-		fmt.Fprintf(tw, "Avg CI Success Rate:\t%.1f%%\n", report.Summary.AvgCISuccessRate)
+		_, _ = fmt.Fprintf(tw, "Avg CI Success Rate:\t%.1f%%\n", report.Summary.AvgCISuccessRate)
 	}
 
-	tw.Flush()
-	fmt.Fprintln(w, "--------------------------------------------------")
+	_ = tw.Flush()
+	_, _ = fmt.Fprintln(w, "--------------------------------------------------")
 
 	return nil
 }

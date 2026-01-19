@@ -75,7 +75,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 
 	for _, run := range allRuns {
 		// Filter out runs that started before Since just in case API returned strictly older ones
-		if run.CreatedAt.Time.Before(cfg.Since) {
+		if run.CreatedAt.Before(cfg.Since) {
 			continue
 		}
 
@@ -86,7 +86,8 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		conclusion := run.GetConclusion()
 		// statuses: success, failure, neutral, cancelled, timed_out, action_required
 
-		if conclusion == "success" {
+		switch conclusion {
+		case "success":
 			successCount++
 			workflowSuccess[wfName]++
 
@@ -102,7 +103,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 				}
 			}
 
-		} else if conclusion == "failure" || conclusion == "timed_out" || conclusion == "startup_failure" {
+		case "failure", "timed_out", "startup_failure":
 			failureCount++
 			workflowFail[wfName]++
 		}

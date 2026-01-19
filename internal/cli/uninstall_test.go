@@ -16,7 +16,7 @@ func TestUninstallCmd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a fake binary file
 	fakeBinary := filepath.Join(tmpDir, "gh-inspect-test")
@@ -49,7 +49,7 @@ func TestUninstallCmdPermissionError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a fake binary file
 	fakeBinary := filepath.Join(tmpDir, "gh-inspect-test")
@@ -64,7 +64,7 @@ func TestUninstallCmdPermissionError(t *testing.T) {
 	if err != nil {
 		t.Skipf("Failed to change directory permissions, skipping test: %v", err)
 	}
-	defer os.Chmod(tmpDir, 0755) // Restore permissions for cleanup
+	defer func() { _ = os.Chmod(tmpDir, 0755) }() // Restore permissions for cleanup
 
 	// Try to remove the file
 	err = os.Remove(fakeBinary)
@@ -85,7 +85,7 @@ func TestUninstallCmdOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a fake binary file
 	fakeBinary := filepath.Join(tmpDir, "gh-inspect-test")
@@ -107,11 +107,11 @@ func TestUninstallCmdOutput(t *testing.T) {
 		fmt.Println("\nNote: The current process is still running. The binary will be fully removed after this command exits.")
 	}
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	// Verify output contains expected messages
@@ -134,7 +134,7 @@ func TestUninstallSymlinkResolution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a fake binary file
 	fakeBinary := filepath.Join(tmpDir, "gh-inspect-real")

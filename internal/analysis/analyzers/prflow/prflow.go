@@ -52,7 +52,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 
 	var totalMergeTime time.Duration
 	var mergedCount int
-	var totalClosed int = len(recentClosedPRs)
+	var totalClosed = len(recentClosedPRs)
 	var selfMergeCount int
 	var draftPRCount int
 	var hasDescriptionCount int

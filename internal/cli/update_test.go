@@ -20,7 +20,7 @@ func TestDownloadChecksums(t *testing.T) {
 	checksumContent := "abc123  file1.tar.gz\ndef456  file2.tar.gz\n"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, checksumContent)
+		_, _ = fmt.Fprint(w, checksumContent)
 	}))
 	defer server.Close()
 
@@ -46,7 +46,7 @@ func TestDownloadFile(t *testing.T) {
 	content := "test file content"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, content)
+		_, _ = fmt.Fprint(w, content)
 	}))
 	defer server.Close()
 
@@ -54,7 +54,7 @@ func TestDownloadFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	filePath := filepath.Join(tmpDir, "testfile")
 	err = downloadFile(server.URL, filePath)
@@ -79,7 +79,7 @@ func TestCalculateSHA256(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	filePath := filepath.Join(tmpDir, "testfile")
 	err = os.WriteFile(filePath, []byte(content), 0644)
@@ -107,7 +107,7 @@ func TestExtractFromTarGz(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a tar.gz archive with a test file
 	archivePath := filepath.Join(tmpDir, "test.tar.gz")
@@ -135,9 +135,9 @@ func TestExtractFromTarGz(t *testing.T) {
 		t.Fatalf("Failed to write tar content: %v", err)
 	}
 
-	tw.Close()
-	gzw.Close()
-	f.Close()
+	_ = tw.Close()
+	_ = gzw.Close()
+	_ = f.Close()
 
 	// Test extraction
 	data, err := extractFromTarGz(archivePath, "gh-inspect")
@@ -155,7 +155,7 @@ func TestExtractFromTarGzNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a tar.gz archive with a different file
 	archivePath := filepath.Join(tmpDir, "test.tar.gz")
@@ -183,9 +183,9 @@ func TestExtractFromTarGzNotFound(t *testing.T) {
 		t.Fatalf("Failed to write tar content: %v", err)
 	}
 
-	tw.Close()
-	gzw.Close()
-	f.Close()
+	_ = tw.Close()
+	_ = gzw.Close()
+	_ = f.Close()
 
 	// Test extraction - should fail
 	_, err = extractFromTarGz(archivePath, "gh-inspect")
@@ -203,7 +203,7 @@ func TestExtractFromZip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a zip archive with a test file
 	archivePath := filepath.Join(tmpDir, "test.zip")
@@ -225,8 +225,8 @@ func TestExtractFromZip(t *testing.T) {
 		t.Fatalf("Failed to write content to zip: %v", err)
 	}
 
-	zw.Close()
-	f.Close()
+	_ = zw.Close()
+	_ = f.Close()
 
 	// Test extraction
 	data, err := extractFromZip(archivePath, "gh-inspect.exe")
@@ -244,7 +244,7 @@ func TestExtractFromZipNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a zip archive with a different file
 	archivePath := filepath.Join(tmpDir, "test.zip")
@@ -266,8 +266,8 @@ func TestExtractFromZipNotFound(t *testing.T) {
 		t.Fatalf("Failed to write content to zip: %v", err)
 	}
 
-	zw.Close()
-	f.Close()
+	_ = zw.Close()
+	_ = f.Close()
 
 	// Test extraction - should fail
 	_, err = extractFromZip(archivePath, "gh-inspect.exe")
@@ -284,7 +284,7 @@ func TestGetLatestRelease(t *testing.T) {
 	releaseJSON := `{"tag_name": "v1.2.3"}`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, releaseJSON)
+		_, _ = fmt.Fprint(w, releaseJSON)
 	}))
 	defer server.Close()
 
@@ -293,7 +293,7 @@ func TestGetLatestRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get response: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var rel Release
 	data, err := io.ReadAll(resp.Body)

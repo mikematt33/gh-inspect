@@ -19,7 +19,7 @@ func getCompletionVersion() string {
 	h := sha256.New()
 	// Include version and command structure in hash
 	h.Write([]byte(Version))
-	
+
 	// Walk through all commands to create a signature
 	var walkCommands func(*cobra.Command)
 	walkCommands = func(cmd *cobra.Command) {
@@ -32,7 +32,7 @@ func getCompletionVersion() string {
 		}
 	}
 	walkCommands(rootCmd)
-	
+
 	return fmt.Sprintf("%x", h.Sum(nil))[:12]
 }
 
@@ -90,7 +90,7 @@ Fish:
 		}
 
 		if len(args) == 0 {
-			cmd.Help()
+			_ = cmd.Help()
 			return
 		}
 
@@ -102,16 +102,16 @@ Fish:
 		switch args[0] {
 		case "bash":
 			writeCompletionHeader(os.Stdout, "bash")
-			cmd.Root().GenBashCompletion(os.Stdout)
+			_ = cmd.Root().GenBashCompletion(os.Stdout)
 		case "zsh":
 			writeCompletionHeader(os.Stdout, "zsh")
-			cmd.Root().GenZshCompletion(os.Stdout)
+			_ = cmd.Root().GenZshCompletion(os.Stdout)
 		case "fish":
 			writeCompletionHeader(os.Stdout, "fish")
-			cmd.Root().GenFishCompletion(os.Stdout, true)
+			_ = cmd.Root().GenFishCompletion(os.Stdout, true)
 		case "powershell":
 			writeCompletionHeader(os.Stdout, "powershell")
-			cmd.Root().GenPowerShellCompletionWithDesc(os.Stdout)
+			_ = cmd.Root().GenPowerShellCompletionWithDesc(os.Stdout)
 		}
 	},
 }
@@ -185,7 +185,7 @@ func runAutoCompletion() {
 		}
 	}()
 
-	if _, err := f.WriteString(fmt.Sprintf("\n# gh-inspect completion\n%s\n", commandToAppend)); err != nil {
+	if _, err := fmt.Fprintf(f, "\n# gh-inspect completion\n%s\n", commandToAppend); err != nil {
 		fmt.Printf("❌ Failed to write to file: %v\n", err)
 		return
 	}
@@ -207,9 +207,9 @@ func writeCompletionHeader(w *os.File, shell string) {
 	case "powershell":
 		comment = "#"
 	}
-	fmt.Fprintf(w, "%s gh-inspect completion version: %s\n", comment, version)
-	fmt.Fprintf(w, "%s gh-inspect version: %s\n", comment, Version)
-	fmt.Fprintf(w, "%s Generated: %s\n\n", comment, "auto")
+	_, _ = fmt.Fprintf(w, "%s gh-inspect completion version: %s\n", comment, version)
+	_, _ = fmt.Fprintf(w, "%s gh-inspect version: %s\n", comment, Version)
+	_, _ = fmt.Fprintf(w, "%s Generated: %s\n\n", comment, "auto")
 }
 
 // runCompletionStatus checks if installed completions match current version

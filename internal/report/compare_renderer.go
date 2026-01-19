@@ -13,7 +13,7 @@ type ComparisonTextRenderer struct{}
 
 func (r *ComparisonTextRenderer) Render(report *models.Report, w io.Writer) error {
 	if len(report.Repositories) == 0 {
-		fmt.Fprintln(w, "No repositories to compare.")
+		_, _ = fmt.Fprintln(w, "No repositories to compare.")
 		return nil
 	}
 
@@ -21,23 +21,23 @@ func (r *ComparisonTextRenderer) Render(report *models.Report, w io.Writer) erro
 
 	// HEADERS
 	// First column empty for Metric Name
-	fmt.Fprint(tw, "METRIC\t")
+	_, _ = fmt.Fprint(tw, "METRIC\t")
 	for _, repo := range report.Repositories {
 		// Truncate if too long?
 		name := repo.Name
 		if len(name) > 20 {
 			name = "..." + name[len(name)-17:]
 		}
-		fmt.Fprintf(tw, "%s\t", name)
+		_, _ = fmt.Fprintf(tw, "%s\t", name)
 	}
-	fmt.Fprintln(tw, "")
+	_, _ = fmt.Fprintln(tw, "")
 
 	// Separator
-	fmt.Fprint(tw, "------\t")
+	_, _ = fmt.Fprint(tw, "------\t")
 	for range report.Repositories {
-		fmt.Fprint(tw, "------\t")
+		_, _ = fmt.Fprint(tw, "------\t")
 	}
-	fmt.Fprintln(tw, "")
+	_, _ = fmt.Fprintln(tw, "")
 
 	// DATA ROWS
 	// robust way: collect all unique (Analyzer, MetricKey) pairs
@@ -47,14 +47,14 @@ func (r *ComparisonTextRenderer) Render(report *models.Report, w io.Writer) erro
 
 	for _, az := range primaryRepo.Analyzers {
 		// Section Header
-		fmt.Fprintf(tw, "[%s]\t", strings.ToUpper(az.Name))
+		_, _ = fmt.Fprintf(tw, "[%s]\t", strings.ToUpper(az.Name))
 		for range report.Repositories {
-			fmt.Fprint(tw, "\t")
+			_, _ = fmt.Fprint(tw, "\t")
 		}
-		fmt.Fprintln(tw, "")
+		_, _ = fmt.Fprintln(tw, "")
 
 		for _, m := range az.Metrics {
-			fmt.Fprintf(tw, "  %s\t", m.Key)
+			_, _ = fmt.Fprintf(tw, "  %s\t", m.Key)
 
 			// For each repo, find this metric
 			for _, repo := range report.Repositories {
@@ -79,12 +79,12 @@ func (r *ComparisonTextRenderer) Render(report *models.Report, w io.Writer) erro
 						}
 					}
 				}
-				fmt.Fprintf(tw, "%s\t", val)
+				_, _ = fmt.Fprintf(tw, "%s\t", val)
 			}
-			fmt.Fprintln(tw, "")
+			_, _ = fmt.Fprintln(tw, "")
 		}
 		// Empty line between sections
-		fmt.Fprintln(tw, "\t")
+		_, _ = fmt.Fprintln(tw, "\t")
 	}
 
 	return tw.Flush()

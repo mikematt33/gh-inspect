@@ -37,7 +37,7 @@ func TestRunCmd(t *testing.T) {
 	err := runCmd.Execute()
 
 	// Restore stdout
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -45,7 +45,7 @@ func TestRunCmd(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	// Since we use TextRenderer by default and the report is empty except summary score,
@@ -54,8 +54,5 @@ func TestRunCmd(t *testing.T) {
 	// Let's verify pipelineRunner was called with correct args?
 	// The mock doesn't assert args here, simplistic test.
 
-	if output == "" {
-		// It might be empty if TextRenderer prints nothing for empty report, but usually it prints headers.
-		// Let's check if it ran at least.
-	}
+	_ = output // Use the output variable to avoid unused variable error
 }

@@ -54,7 +54,7 @@ func TestOrgCmd(t *testing.T) {
 	err := orgCmd.Execute()
 
 	// Restore
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -62,7 +62,7 @@ func TestOrgCmd(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	// Check output

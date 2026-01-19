@@ -167,7 +167,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 			DisplayValue: "No",
 			Description:  "No branch protection configured",
 		})
-		healthScore -= 15
+		// healthScore -= 15 // This assignment has no effect
 		findings = append(findings, models.Finding{
 			Type:        "no_branch_protection",
 			Severity:    models.SeverityMedium,

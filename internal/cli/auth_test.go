@@ -107,10 +107,9 @@ func TestPromptYesNo(t *testing.T) {
 
 			// Write test input
 			go func() {
-				w.WriteString(tt.input)
-				w.Close()
+				_, _ = w.WriteString(tt.input)
+				_ = w.Close()
 			}()
-
 			result := promptYesNo("Test question")
 			if result != tt.expected {
 				t.Errorf("promptYesNo() with input %q = %v, want %v", tt.input, result, tt.expected)
@@ -134,12 +133,12 @@ func TestSaveToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Mock XDG_CONFIG_HOME to point to tmpDir
 	originalXDG := os.Getenv("XDG_CONFIG_HOME")
-	defer os.Setenv("XDG_CONFIG_HOME", originalXDG)
-	os.Setenv("XDG_CONFIG_HOME", tmpDir)
+	defer func() { _ = os.Setenv("XDG_CONFIG_HOME", originalXDG) }()
+	_ = os.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	// Capture stdout
 	oldStdout := os.Stdout
@@ -166,10 +165,10 @@ func TestSaveToken(t *testing.T) {
 	saveToken(testToken)
 
 	// Restore stdout and capture output
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	// Check output contains success message

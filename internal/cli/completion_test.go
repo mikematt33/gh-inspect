@@ -59,7 +59,7 @@ func TestCompletionBashGeneration(t *testing.T) {
 	err := cmd.Execute()
 
 	// Restore stdout
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -67,7 +67,7 @@ func TestCompletionBashGeneration(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	// Check that bash completion script was generated
@@ -94,7 +94,7 @@ func TestCompletionZshGeneration(t *testing.T) {
 	err := cmd.Execute()
 
 	// Restore stdout
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -102,7 +102,7 @@ func TestCompletionZshGeneration(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	// Check that zsh completion script was generated
@@ -118,17 +118,17 @@ func TestRunAutoCompletionBash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Mock home directory
 	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpDir)
+	defer func() { _ = os.Setenv("HOME", originalHome) }()
+	_ = os.Setenv("HOME", tmpDir)
 
 	// Mock SHELL environment variable
 	originalShell := os.Getenv("SHELL")
-	defer os.Setenv("SHELL", originalShell)
-	os.Setenv("SHELL", "/bin/bash")
+	defer func() { _ = os.Setenv("SHELL", originalShell) }()
+	_ = os.Setenv("SHELL", "/bin/bash")
 
 	// Create .bashrc file
 	bashrcPath := filepath.Join(tmpDir, ".bashrc")
@@ -149,20 +149,20 @@ func TestRunAutoCompletionBash(t *testing.T) {
 
 	// Write "y\n" to stdin to accept the prompt
 	go func() {
-		wIn.WriteString("y\n")
-		wIn.Close()
+		_, _ = wIn.WriteString("y\n")
+		_ = wIn.Close()
 	}()
 
 	// Run auto completion
 	runAutoCompletion()
 
 	// Restore
-	wOut.Close()
+	_ = wOut.Close()
 	os.Stdout = oldStdout
 	os.Stdin = oldStdin
 
 	var buf bytes.Buffer
-	io.Copy(&buf, rOut)
+	_, _ = io.Copy(&buf, rOut)
 	output := buf.String()
 
 	// Check output for expected messages
@@ -187,17 +187,17 @@ func TestRunAutoCompletionZsh(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Mock home directory
 	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpDir)
+	defer func() { _ = os.Setenv("HOME", originalHome) }()
+	_ = os.Setenv("HOME", tmpDir)
 
 	// Mock SHELL environment variable
 	originalShell := os.Getenv("SHELL")
-	defer os.Setenv("SHELL", originalShell)
-	os.Setenv("SHELL", "/bin/zsh")
+	defer func() { _ = os.Setenv("SHELL", originalShell) }()
+	_ = os.Setenv("SHELL", "/bin/zsh")
 
 	// Create .zshrc file
 	zshrcPath := filepath.Join(tmpDir, ".zshrc")
@@ -218,20 +218,20 @@ func TestRunAutoCompletionZsh(t *testing.T) {
 
 	// Write "y\n" to stdin to accept the prompt
 	go func() {
-		wIn.WriteString("y\n")
-		wIn.Close()
+		_, _ = wIn.WriteString("y\n")
+		_ = wIn.Close()
 	}()
 
 	// Run auto completion
 	runAutoCompletion()
 
 	// Restore
-	wOut.Close()
+	_ = wOut.Close()
 	os.Stdout = oldStdout
 	os.Stdin = oldStdin
 
 	var buf bytes.Buffer
-	io.Copy(&buf, rOut)
+	_, _ = io.Copy(&buf, rOut)
 	output := buf.String()
 
 	// Check output for expected messages
@@ -256,17 +256,17 @@ func TestRunAutoCompletionAlreadyConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Mock home directory
 	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpDir)
+	defer func() { _ = os.Setenv("HOME", originalHome) }()
+	_ = os.Setenv("HOME", tmpDir)
 
 	// Mock SHELL environment variable
 	originalShell := os.Getenv("SHELL")
-	defer os.Setenv("SHELL", originalShell)
-	os.Setenv("SHELL", "/bin/bash")
+	defer func() { _ = os.Setenv("SHELL", originalShell) }()
+	_ = os.Setenv("SHELL", "/bin/bash")
 
 	// Create .bashrc file with completion already configured
 	bashrcPath := filepath.Join(tmpDir, ".bashrc")
@@ -288,20 +288,20 @@ func TestRunAutoCompletionAlreadyConfigured(t *testing.T) {
 
 	// Write "y\n" twice (first for "Do you want to proceed", second for "Append anyway")
 	go func() {
-		wIn.WriteString("y\ny\n")
-		wIn.Close()
+		_, _ = wIn.WriteString("y\ny\n")
+		_ = wIn.Close()
 	}()
 
 	// Run auto completion
 	runAutoCompletion()
 
 	// Restore
-	wOut.Close()
+	_ = wOut.Close()
 	os.Stdout = oldStdout
 	os.Stdin = oldStdin
 
 	var buf bytes.Buffer
-	io.Copy(&buf, rOut)
+	_, _ = io.Copy(&buf, rOut)
 	output := buf.String()
 
 	// Check output mentions already configured
@@ -313,8 +313,8 @@ func TestRunAutoCompletionAlreadyConfigured(t *testing.T) {
 func TestRunAutoCompletionUnsupportedShell(t *testing.T) {
 	// Mock SHELL environment variable to unsupported shell
 	originalShell := os.Getenv("SHELL")
-	defer os.Setenv("SHELL", originalShell)
-	os.Setenv("SHELL", "/bin/fish")
+	defer func() { _ = os.Setenv("SHELL", originalShell) }()
+	_ = os.Setenv("SHELL", "/bin/fish")
 
 	// Capture stdout
 	oldStdout := os.Stdout
@@ -325,11 +325,11 @@ func TestRunAutoCompletionUnsupportedShell(t *testing.T) {
 	runAutoCompletion()
 
 	// Restore
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	// Check output mentions unsupported
