@@ -369,7 +369,14 @@ func storeTokenPersistentShell(token string) {
 	}
 
 	// Prepare new content with appended token
-	newContent := fmt.Sprintf("%s\n# GitHub token for gh-inspect\nexport GITHUB_TOKEN=\"%s\"\n", existingContent, token)
+	// Ensure proper spacing: add newline separator only if existing content doesn't end with one
+	separator := "\n"
+	if existingContent != "" && !strings.HasSuffix(existingContent, "\n") {
+		separator = "\n"
+	} else if existingContent == "" {
+		separator = ""
+	}
+	newContent := fmt.Sprintf("%s%s# GitHub token for gh-inspect\nexport GITHUB_TOKEN=\"%s\"\n", existingContent, separator, token)
 
 	// Write to a temporary file first to avoid data loss on write failure
 	dir := filepath.Dir(targetFile)

@@ -46,10 +46,6 @@ Use --quiet to suppress progress output or --verbose for detailed information.`,
 			return cobra.MinimumNArgs(1)(cmd, args)
 		},
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			// When listing analyzers, skip pre-run checks
-			if flagListAnalyzers {
-				return nil
-			}
 			return nil
 		},
 		ValidArgsFunction: completeRepositories,
