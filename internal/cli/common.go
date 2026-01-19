@@ -38,12 +38,52 @@ func getClientWithToken(cfg *config.Config) (*ghclient.ClientWrapper, error) {
 
 // AnalysisOptions contains the configuration for running repository analysis.
 type AnalysisOptions struct {
-	Repos []string
-	Since string
-	Deep  bool
+	Repos   []string
+	Since   string
+	Deep    bool
+	Include []string
+	Exclude []string
 }
 
 var pipelineRunner = RunAnalysisPipeline
+
+// shouldIncludeAnalyzer determines if an analyzer should be included based on include/exclude filters.
+// If include list is provided, only those analyzers are included.
+// If exclude list is provided, all analyzers except those are included.
+// Include takes precedence over exclude.
+func shouldIncludeAnalyzer(analyzerName string, include, exclude []string) bool {
+	// Map full analyzer names to their short names
+	shortName := analyzerName
+	switch analyzerName {
+	case "pr-flow":
+		shortName = "prflow"
+	case "repo-health":
+		shortName = "health"
+	case "issue-hygiene":
+		shortName = "issues"
+	}
+
+	// If include list is specified, only include analyzers in the list
+	if len(include) > 0 {
+		for _, name := range include {
+			if name == shortName || name == analyzerName {
+				return true
+			}
+		}
+		return false
+	}
+
+	// If exclude list is specified, exclude analyzers in the list
+	if len(exclude) > 0 {
+		for _, name := range exclude {
+			if name == shortName || name == analyzerName {
+				return false
+			}
+		}
+	}
+
+	return true
+}
 
 // RunAnalysisPipeline executes the complete analysis workflow for the specified repositories.
 // It loads configuration, sets up analyzers, runs analysis concurrently, and aggregates results.
@@ -110,37 +150,39 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	// Setup Analyzer Registry
 	var analyzers []analysis.Analyzer
 
-	// Always add Activity (Tier 1)
-	analyzers = append(analyzers, activity.New())
+	// Always add Activity (Tier 1) if included
+	if shouldIncludeAnalyzer("activity", opts.Include, opts.Exclude) {
+		analyzers = append(analyzers, activity.New())
+	}
 
-	if cfg.Analyzers.PRFlow.Enabled {
+	if cfg.Analyzers.PRFlow.Enabled && shouldIncludeAnalyzer("pr-flow", opts.Include, opts.Exclude) {
 		analyzers = append(analyzers, prflow.New(cfg.Analyzers.PRFlow.Params.StaleThresholdDays))
 	}
 
-	if cfg.Analyzers.RepoHealth.Enabled {
+	if cfg.Analyzers.RepoHealth.Enabled && shouldIncludeAnalyzer("repo-health", opts.Include, opts.Exclude) {
 		analyzers = append(analyzers, repohealth.New())
 	}
 
-	if cfg.Analyzers.IssueHygiene.Enabled {
+	if cfg.Analyzers.IssueHygiene.Enabled && shouldIncludeAnalyzer("issue-hygiene", opts.Include, opts.Exclude) {
 		analyzers = append(analyzers, issuehygiene.New(
 			cfg.Analyzers.IssueHygiene.Params.StaleThresholdDays,
 			cfg.Analyzers.IssueHygiene.Params.ZombieThresholdDays,
 		))
 	}
 
-	if cfg.Analyzers.CI.Enabled {
+	if cfg.Analyzers.CI.Enabled && shouldIncludeAnalyzer("ci", opts.Include, opts.Exclude) {
 		analyzers = append(analyzers, ci.New())
 	}
 
-	if cfg.Analyzers.Security.Enabled {
+	if cfg.Analyzers.Security.Enabled && shouldIncludeAnalyzer("security", opts.Include, opts.Exclude) {
 		analyzers = append(analyzers, security.New())
 	}
 
-	if cfg.Analyzers.Releases.Enabled {
+	if cfg.Analyzers.Releases.Enabled && shouldIncludeAnalyzer("releases", opts.Include, opts.Exclude) {
 		analyzers = append(analyzers, releases.New())
 	}
 
-	if cfg.Analyzers.Branches.Enabled {
+	if cfg.Analyzers.Branches.Enabled && shouldIncludeAnalyzer("branches", opts.Include, opts.Exclude) {
 		analyzers = append(analyzers, branches.New(cfg.Analyzers.Branches.Params.StaleThresholdDays))
 	}
 

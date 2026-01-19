@@ -17,16 +17,30 @@ Useful for benchmarking internal projects against each other or comparing agains
 Minimum 2 repositories required. Supports all analysis flags including --quiet and --verbose.`,
 	Example: `  gh-inspect compare owner/repo1 owner/repo2
   gh-inspect compare owner/repo1 owner/repo2 owner/repo3 --since=90d
-  gh-inspect compare owner/repo1 owner/repo2 --format=json`,
-	Args: cobra.MinimumNArgs(2),
-	Run:  runComparison,
+  gh-inspect compare owner/repo1 owner/repo2 --format=json
+  gh-inspect compare owner/repo1 owner/repo2 --include=activity,ci`,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if flagListAnalyzers {
+			return nil // Allow no args when listing analyzers
+		}
+		return cobra.MinimumNArgs(2)(cmd, args)
+	},
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if flagListAnalyzers {
+			listAnalyzers()
+		}
+		return nil
+	},
+	Run: runComparison,
 }
 
 func runComparison(cmd *cobra.Command, args []string) {
 	opts := AnalysisOptions{
-		Repos: args,
-		Since: flagSince,
-		Deep:  flagDeep,
+		Repos:   args,
+		Since:   flagSince,
+		Deep:    flagDeep,
+		Include: flagInclude,
+		Exclude: flagExclude,
 	}
 
 	fullReport, err := pipelineRunner(opts)

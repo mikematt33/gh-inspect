@@ -99,6 +99,9 @@ gh-inspect run owner/repo [flags]
 - `-f, --format string`: Output format (text, json) (default "text").
 - `-s, --since string`: Lookback window (e.g. 30d, 24h) (default "30d").
 - `--fail-under int`: Exit with error code 1 if average health score is below this value.
+- `--include strings`: Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
+- `--exclude strings`: Exclude specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
+- `--list-analyzers`: List all available analyzers with descriptions and exit.
 
 **Global Flags:**
 
@@ -249,6 +252,44 @@ Suppress progress output for cleaner CI logs.
 ```bash
 gh-inspect run owner/repo --quiet --format=json > report.json
 ```
+
+**List Available Analyzers**
+See all available analyzers with their descriptions.
+
+```bash
+gh-inspect run --list-analyzers
+# or with any command:
+gh-inspect org --list-analyzers
+gh-inspect user --list-analyzers
+gh-inspect compare --list-analyzers
+```
+
+**Selective Analyzers with Include**
+Run only specific analyzers when you need targeted analysis.
+
+```bash
+# Only check activity, CI status, and security
+gh-inspect run owner/repo --include=activity,ci,security
+```
+
+**Exclude Analyzers**
+Skip analyzers you don't need to save API rate limits and time.
+
+```bash
+# Skip releases and branches analysis
+gh-inspect run owner/repo --exclude=releases,branches
+```
+
+**Available Analyzers:**
+
+- `activity` - Commit patterns, contributors, bus factor
+- `prflow` - Pull request velocity and cycle time
+- `ci` - CI/CD workflow success rates
+- `issues` - Issue hygiene and zombie detection
+- `security` - Security advisories and vulnerabilities
+- `releases` - Release frequency and patterns
+- `branches` - Branch protection and stale branches
+- `health` - Repository health files (README, LICENSE, etc.)
 
 **Verbose Mode**
 Get detailed progress information during long-running analyses.

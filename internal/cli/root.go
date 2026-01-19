@@ -36,8 +36,21 @@ Use --quiet to suppress progress output or --verbose for detailed information.`,
 		Example: `  gh-inspect run owner/repo
   gh-inspect run owner/repo1 owner/repo2 --deep
   gh-inspect run owner/repo --format=json > report.json
-  gh-inspect run owner/repo --quiet --fail-under=80`,
-		Args:              cobra.MinimumNArgs(1),
+  gh-inspect run owner/repo --quiet --fail-under=80
+  gh-inspect run owner/repo --include=activity,ci,security
+  gh-inspect run owner/repo --exclude=branches,releases`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if flagListAnalyzers {
+				return nil // Allow no args when listing analyzers
+			}
+			return cobra.MinimumNArgs(1)(cmd, args)
+		},
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if flagListAnalyzers {
+				listAnalyzers()
+			}
+			return nil
+		},
 		ValidArgsFunction: completeRepositories,
 		Run:               runAnalysis,
 	}
@@ -45,13 +58,37 @@ Use --quiet to suppress progress output or --verbose for detailed information.`,
 
 // Flags
 var (
-	flagFormat  string
-	flagSince   string
-	flagDeep    bool
-	flagFail    int
-	flagQuiet   bool
-	flagVerbose bool
+	flagFormat        string
+	flagSince         string
+	flagDeep          bool
+	flagFail          int
+	flagQuiet         bool
+	flagVerbose       bool
+	flagInclude       []string
+	flagExclude       []string
+	flagListAnalyzers bool
 )
+
+// listAnalyzers prints all available analyzers with descriptions and exits
+func listAnalyzers() {
+	fmt.Println("Available Analyzers:")
+	fmt.Println()
+	fmt.Printf("  %-12s %s\n", "activity", "Commit patterns, contributors, and bus factor analysis")
+	fmt.Printf("  %-12s %s\n", "prflow", "Pull request velocity, cycle time, and review metrics")
+	fmt.Printf("  %-12s %s\n", "ci", "CI/CD workflow success rates and stability")
+	fmt.Printf("  %-12s %s\n", "issues", "Issue hygiene, stale issues, and zombie detection")
+	fmt.Printf("  %-12s %s\n", "security", "Security advisories and vulnerability scanning")
+	fmt.Printf("  %-12s %s\n", "releases", "Release frequency and versioning patterns")
+	fmt.Printf("  %-12s %s\n", "branches", "Branch protection and stale branch detection")
+	fmt.Printf("  %-12s %s\n", "health", "Repository health files (README, LICENSE, CONTRIBUTING, etc.)")
+	fmt.Println()
+	fmt.Println("Usage:")
+	fmt.Println("  --include=activity,ci      Run only specified analyzers")
+	fmt.Println("  --exclude=releases,security  Skip specified analyzers")
+	fmt.Println()
+	fmt.Println("Note: Analyzers can also be enabled/disabled in the config file.")
+	os.Exit(0)
+}
 
 // registerAnalysisFlags adds common analysis flags to a command
 func registerAnalysisFlags(cmd *cobra.Command) {
@@ -67,6 +104,18 @@ func registerAnalysisFlags(cmd *cobra.Command) {
 
 	cmd.Flags().BoolVarP(&flagDeep, "deep", "d", false, "Enable deep scanning (warning: consumes more API rate limit)")
 	cmd.Flags().IntVar(&flagFail, "fail-under", 0, "Exit with error code 1 if average health score is below this value")
+
+	cmd.Flags().StringSliceVar(&flagInclude, "include", nil, "Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health)")
+	_ = cmd.RegisterFlagCompletionFunc("include", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"activity", "prflow", "ci", "issues", "security", "releases", "branches", "health"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	cmd.Flags().StringSliceVar(&flagExclude, "exclude", nil, "Exclude specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health)")
+	_ = cmd.RegisterFlagCompletionFunc("exclude", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"activity", "prflow", "ci", "issues", "security", "releases", "branches", "health"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	cmd.Flags().BoolVar(&flagListAnalyzers, "list-analyzers", false, "List all available analyzers and exit")
 }
 
 // shouldPrintInfo returns true if informational messages should be printed (not in quiet mode)
@@ -137,9 +186,11 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 	}
 
 	opts := AnalysisOptions{
-		Repos: args,
-		Since: flagSince,
-		Deep:  flagDeep,
+		Repos:   args,
+		Since:   flagSince,
+		Deep:    flagDeep,
+		Include: flagInclude,
+		Exclude: flagExclude,
 	}
 
 	fullReport, err := pipelineRunner(opts)

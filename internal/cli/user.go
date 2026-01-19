@@ -20,8 +20,20 @@ Useful for personal portfolio reviews or analyzing open source contributions.
 Displays a progress bar during analysis. Use --quiet for CI/CD environments.`,
 	Example: `  gh-inspect user octocat
   gh-inspect user octocat --deep
-  gh-inspect user octocat --quiet --format=json`,
-	Args:              cobra.ExactArgs(1),
+  gh-inspect user octocat --quiet --format=json
+  gh-inspect user octocat --include=activity,prflow,ci`,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if flagListAnalyzers {
+			return nil // Allow no args when listing analyzers
+		}
+		return cobra.ExactArgs(1)(cmd, args)
+	},
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if flagListAnalyzers {
+			listAnalyzers()
+		}
+		return nil
+	},
 	ValidArgsFunction: completeUsers,
 	Run:               runUserAnalysis,
 }
@@ -87,9 +99,11 @@ func runUserAnalysis(cmd *cobra.Command, args []string) {
 	}
 
 	opts := AnalysisOptions{
-		Repos: targetRepos,
-		Since: flagSince, // Uses flags from root (or init above)
-		Deep:  flagDeep,
+		Repos:   targetRepos,
+		Since:   flagSince, // Uses flags from root (or init above)
+		Deep:    flagDeep,
+		Include: flagInclude,
+		Exclude: flagExclude,
 	}
 
 	fullReport, err := pipelineRunner(opts)
