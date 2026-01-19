@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -103,6 +104,9 @@ func saveHistory(history *recentHistory) error {
 func recordUsage(value, itemType string) {
 	history, err := loadHistory()
 	if err != nil {
+		if shouldPrintVerbose() {
+			fmt.Fprintf(os.Stderr, "Warning: failed to load completion history: %v\n", err)
+		}
 		return // Silently fail on history tracking errors
 	}
 
@@ -126,7 +130,10 @@ func recordUsage(value, itemType string) {
 		})
 	}
 
-	saveHistory(history)
+	err = saveHistory(history)
+	if err != nil && shouldPrintVerbose() {
+		fmt.Fprintf(os.Stderr, "Warning: failed to save completion history: %v\n", err)
+	}
 }
 
 // getRecentItems returns recent items of a specific type, sorted by frequency and recency

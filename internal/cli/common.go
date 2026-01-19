@@ -175,7 +175,7 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 
 	// Create progress bar if not in quiet mode
 	var bar *progressbar.ProgressBar
-	if shouldPrintInfo() && !flagQuiet {
+	if shouldPrintInfo() {
 		bar = progressbar.NewOptions(totalRepos,
 			progressbar.OptionSetDescription("Analyzing repositories"),
 			progressbar.OptionSetWidth(40),
