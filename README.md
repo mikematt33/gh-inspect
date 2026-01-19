@@ -33,7 +33,7 @@ curl -sfL https://raw.githubusercontent.com/mikematt33/gh-inspect/main/install.s
 
 ### Build from Source
 
-Requirements: Go 1.21+
+Requirements: Go 1.24+
 
 ```bash
 # Clone the repository
@@ -46,6 +46,16 @@ make build
 # Verify installation
 ./bin/gh-inspect --help
 ```
+
+## 🔧 System Requirements
+
+- **Go Version**: 1.24.0 or higher
+- **GitHub Token**: Required for accessing GitHub API (5000 requests/hour with authentication)
+- **Rate Limit Considerations**: The tool includes smart API call optimization:
+  - Repository data caching (reduces duplicate calls by 2-3 per repo)
+  - Time-windowed queries (only fetches data within analysis period)
+  - Intelligent pagination limits (up to 5000 workflow runs, 1000 issues, etc.)
+  - Pre-flight rate limit checks with warnings
 
 ## ⚡ Quick Start
 
@@ -76,14 +86,48 @@ make build
 Log in to GitHub to access private repos and increase rate limits.
 
 ```bash
-# Interactive login (default)
+# Show available auth commands
 gh-inspect auth
 
-# Or use subcommands
-gh-inspect auth login   # Log in
-gh-inspect auth status  # Check authentication status
-gh-inspect auth logout  # Remove stored token
+# Log in interactively
+gh-inspect auth login
+
+# Check authentication status (shows rate limits with human-readable time)
+gh-inspect auth status
+
+# Log out (removes tokens from all locations: config, shell files, gh CLI)
+gh-inspect auth logout
+
+# For servers without a browser (uses device code flow)
+gh-inspect auth login --no-browser
 ```
+
+**Token Storage Options:**
+
+When logging in, you can choose how to store your GitHub token:
+
+1. **Temporary** (session only) - Export to current terminal
+2. **Persistent shell** - Add to `.bashrc` or `.zshrc` for all sessions
+3. **Config file** - Store in gh-inspect configuration (shown with security warning)
+4. **Don't store** - Use token once, don't save
+
+**Auth Status Features:**
+
+The `auth status` command shows:
+
+- Current authentication status
+- Token source (config file, environment variable, or gh CLI)
+- Rate limit remaining/total
+- Reset time in both RFC3339 and human-readable format (e.g., "in 45 minutes")
+
+**Logout Features:**
+
+The `auth logout` command intelligently:
+
+- Detects tokens in all locations (config, shell files, environment variables, gh CLI)
+- Shows all found token locations
+- Removes tokens from config file and shell rc files automatically
+- Provides instructions for manual removal of environment variables and gh CLI tokens
 
 #### `run` - Analyze Repositories
 
@@ -99,11 +143,22 @@ gh-inspect run owner/repo [flags]
 - `-f, --format string`: Output format (text, json) (default "text").
 - `-s, --since string`: Lookback window (e.g. 30d, 24h) (default "30d").
 - `--fail-under int`: Exit with error code 1 if average health score is below this value.
+- `--include strings`: Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
+- `--exclude strings`: Exclude specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
+- `--list-analyzers`: List all available analyzers with descriptions and exit.
 
 **Global Flags:**
 
 - `-q, --quiet`: Suppress non-essential output (useful for CI/CD).
 - `-v, --verbose`: Enable verbose output with detailed progress information.
+
+**Progress Indicator:**
+
+During analysis, a clean progress bar shows:
+
+- Current progress: `Analyzing repositories (5/10)`
+- Automatically clears when complete for clean output
+- Can be suppressed with `--quiet` flag for CI/CD pipelines
 
 #### `org` - Organization Scan
 
@@ -113,9 +168,22 @@ Scan all active repositories in a GitHub organization. Automatically skips archi
 gh-inspect org organization [flags]
 ```
 
+**Features:**
+
+- Analyzes all non-archived repositories in the organization
+- Provides aggregated organization-level summary including:
+  - Total repositories analyzed
+  - Average health score across all repos
+  - Average PR cycle time
+  - Average CI success rate
+  - **Average CI runtime** 🆕 - Mean build time across all repos
+  - Total commits, issues, and findings
+  - Repos at risk (health score < 50)
+  - Repos with bus factor of 1
+
 **Flags:**
 
-- Uses the same flags as `run` (`--deep`, `--format`, `--since`, `--fail-under`).
+- Uses the same flags as `run` (`--deep`, `--format`, `--since`, `--fail-under`, `--include`, `--exclude`).
 
 #### `user` - User Scan
 
@@ -125,9 +193,15 @@ Analyze all repositories belonging to a specific user.
 gh-inspect user username [flags]
 ```
 
+**Features:**
+
+- Analyzes all repositories owned by the user
+- Gracefully handles empty repositories (shows info message instead of error)
+- Provides same aggregated summary as organization scans
+
 **Flags:**
 
-- Uses the same flags as `run` (`--deep`, `--format`, `--since`, `--fail-under`).
+- Uses the same flags as `run` (`--deep`, `--format`, `--since`, `--fail-under`, `--include`, `--exclude`).
 
 #### `compare` - Compare Repositories
 
@@ -192,6 +266,7 @@ Completions support:
 - ✅ **Organizations** - Lists your GitHub organizations
 - ✅ **Users** - Includes your authenticated user and recent users
 - ✅ **Auto-update detection** - Warns when completions are stale
+- ✅ **Smart replacement** - `--auto` flag replaces outdated completions instead of duplicating them
 
 **Manual Setup:**
 
@@ -249,6 +324,44 @@ Suppress progress output for cleaner CI logs.
 ```bash
 gh-inspect run owner/repo --quiet --format=json > report.json
 ```
+
+**List Available Analyzers**
+See all available analyzers with their descriptions.
+
+```bash
+gh-inspect run --list-analyzers
+# or with any command:
+gh-inspect org --list-analyzers
+gh-inspect user --list-analyzers
+gh-inspect compare --list-analyzers
+```
+
+**Selective Analyzers with Include**
+Run only specific analyzers when you need targeted analysis.
+
+```bash
+# Only check activity, CI status, and security
+gh-inspect run owner/repo --include=activity,ci,security
+```
+
+**Exclude Analyzers**
+Skip analyzers you don't need to save API rate limits and time.
+
+```bash
+# Skip releases and branches analysis
+gh-inspect run owner/repo --exclude=releases,branches
+```
+
+**Available Analyzers:**
+
+- `activity` - Commit patterns, contributors, bus factor
+- `prflow` - Pull request velocity and cycle time
+- `ci` - CI/CD workflow success rates
+- `issues` - Issue hygiene and zombie detection
+- `security` - Security advisories and vulnerabilities
+- `releases` - Release frequency and patterns
+- `branches` - Branch protection and stale branches
+- `health` - Repository health files (README, LICENSE, etc.)
 
 **Verbose Mode**
 Get detailed progress information during long-running analyses.
@@ -393,10 +506,18 @@ Evaluates repository governance and standards:
 
 Monitors continuous integration health:
 
-- **Workflow Runs Total** - CI executions in window
+- **Workflow Runs All Time** 🆕 - Total CI executions ever (accurate count from API)
+- **Workflow Runs in Window** 🆕 - CI executions in analysis period
+- **Workflow Runs Analyzed** 🆕 - Sample size used for statistics (up to 5000)
+- **Unique Workflows** 🆕 - Number of different workflow files
+- **Success Count** 🆕 - Number of successful runs
+- **Failure Count** 🆕 - Number of failed runs
+- **Cancelled Count** 🆕 - Number of cancelled runs
 - **Success Rate** - Percentage of passing runs
 - **Avg Runtime** - Mean workflow duration
-- Identifies expensive workflows
+- Identifies expensive workflows and flaky tests
+
+**Note:** Statistics (success rate, avg runtime) are calculated from up to 5000 recent runs within the analysis window, providing highly accurate insights without exhausting API rate limits.
 
 #### Security Analyzer 🆕
 
@@ -428,6 +549,58 @@ Monitors branch management hygiene:
 - Identifies cleanup opportunities
 
 All analyzers work with `run`, `org`, `user`, and `compare` commands!
+
+## ⚡ Performance & API Optimization
+
+gh-inspect is designed to provide comprehensive analysis while minimizing API calls and respecting GitHub's rate limits.
+
+### Smart API Call Management
+
+**Repository Data Caching:**
+
+- Repository metadata is cached in-memory per session
+- Reduces duplicate API calls when multiple analyzers need the same data
+- Saves 2-3 API calls per repository analyzed
+
+**Time-Windowed Queries:**
+
+- Only fetches data within the specified analysis period (default: 30 days)
+- Uses GitHub's built-in filtering to avoid retrieving unnecessary historical data
+- Significantly reduces pagination for active repositories
+
+**Intelligent Pagination:**
+
+- Workflow runs: Up to 5,000 analyzed (with accurate all-time total from API)
+- Issues: Automatically paginated with 100 per page
+- Pull requests: Smart sampling for large repositories
+- Commits: Time-bounded to analysis window
+
+**Rate Limit Protection:**
+
+- Pre-flight checks estimate API cost before analysis
+- Warns if rate limit might be exhausted
+- Automatic rate limit monitoring with sleep/retry on exhaustion
+- Real-time rate limit display in `auth status` command
+
+### Typical API Cost
+
+For a **moderately active repository** (50-100 commits/week) with default 30d window:
+
+- **Minimal scan**: ~15-25 API calls per repository
+- **Deep scan**: ~30-50 API calls per repository
+
+With authentication, you have 5,000 requests/hour, which allows analyzing:
+
+- **200-300 repositories** in a single organization scan
+- **Multiple teams** across different analysis windows
+
+### Empty Repository Handling
+
+Empty repositories are gracefully handled:
+
+- No error thrown for repositories with no commits
+- Shows informational finding: "Repository is empty (no commits)"
+- Continues analyzing other repositories normally
 
 ## 🤝 Contributing
 

@@ -34,8 +34,20 @@ Automatically fetches all repositories, filters out archived ones, and runs the 
 Displays a progress bar during analysis. Use --quiet for CI/CD environments.`,
 	Example: `  gh-inspect org my-org
   gh-inspect org my-org --fail-under=80
-  gh-inspect org my-org --quiet --format=json`,
-	Args:              cobra.ExactArgs(1),
+  gh-inspect org my-org --quiet --format=json
+  gh-inspect org my-org --exclude=security,releases`,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if flagListAnalyzers {
+			return nil // Allow no args when listing analyzers
+		}
+		return cobra.ExactArgs(1)(cmd, args)
+	},
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if flagListAnalyzers {
+			listAnalyzers()
+		}
+		return nil
+	},
 	ValidArgsFunction: completeOrganizations,
 	Run:               runOrgAnalysis,
 }
@@ -94,7 +106,9 @@ func runOrgAnalysis(cmd *cobra.Command, args []string) {
 		Repos: targetRepos,
 		Since: flagSince, // Flag from root/org command share the same vars if defined in root?
 		// checks root.go... yes, var flagFormat, flagSince, flagDeep are package variables.
-		Deep: flagDeep,
+		Deep:    flagDeep,
+		Include: flagInclude,
+		Exclude: flagExclude,
 	}
 
 	fullReport, err := pipelineRunner(opts)

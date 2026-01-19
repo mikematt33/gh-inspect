@@ -166,11 +166,42 @@ func runAutoCompletion() {
 		return
 	}
 
-	if strings.Contains(string(content), "gh-inspect completion") {
-		fmt.Println("⚠️  It looks like gh-inspect completion is already configured in this file.")
-		if !promptYesNo("Append anyway?") {
+	existingContent := string(content)
+
+	if strings.Contains(existingContent, "gh-inspect completion") {
+		fmt.Println("⚠️  gh-inspect completion is already configured in this file.")
+
+		// Check if it's an old version by looking for the command
+		oldCommand := ""
+		lines := strings.Split(existingContent, "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "source") && strings.Contains(trimmed, "gh-inspect completion") {
+				oldCommand = line
+				break
+			}
+		}
+
+		if oldCommand != "" && strings.TrimSpace(oldCommand) != strings.TrimSpace(commandToAppend) {
+			fmt.Println("🔄 Detected outdated completion command. Will replace with updated version.")
+
+			// Replace the old command with the new one
+			newContent := strings.Replace(existingContent, oldCommand, commandToAppend, 1)
+
+			if err := os.WriteFile(targetFile, []byte(newContent), 0644); err != nil {
+				fmt.Printf("❌ Failed to update file: %v\n", err)
+				return
+			}
+
+			fmt.Println("✅ Successfully updated completion configuration.")
+			fmt.Printf("🔄 Please restart your terminal or run 'source %s' to activate.\n", targetFile)
+			fmt.Println("\n💡 Run 'gh-inspect completion status' to verify your completion setup.")
 			return
 		}
+
+		// Already configured and up-to-date
+		fmt.Println("✅ Completion is already configured and up-to-date.")
+		return
 	}
 
 	// Now open file for appending

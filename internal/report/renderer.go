@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"text/tabwriter"
+	"time"
 
 	"github.com/mikematt33/gh-inspect/pkg/insights"
 	"github.com/mikematt33/gh-inspect/pkg/models"
@@ -139,8 +140,11 @@ func (r *TextRenderer) Render(report *models.Report, w io.Writer) error {
 	if report.Summary.AvgPRCycleTime > 0 {
 		_, _ = fmt.Fprintf(tw, "Avg PR Cycle Time:\t%.1fh\n", report.Summary.AvgPRCycleTime)
 	}
-	if report.Summary.AvgCISuccessRate > 0 || report.Summary.AvgHealthScore > 0 {
+	if report.Summary.AvgCISuccessRate > 0 {
 		_, _ = fmt.Fprintf(tw, "Avg CI Success Rate:\t%.1f%%\n", report.Summary.AvgCISuccessRate)
+	}
+	if report.Summary.AvgCIRuntime > 0 {
+		_, _ = fmt.Fprintf(tw, "Avg CI Runtime:\t%s\n", (time.Duration(report.Summary.AvgCIRuntime) * time.Second).String())
 	}
 
 	_ = tw.Flush()

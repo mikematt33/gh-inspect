@@ -2,10 +2,12 @@ package activity
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
 
+	"github.com/google/go-github/v60/github"
 	"github.com/mikematt33/gh-inspect/internal/analysis"
 	"github.com/mikematt33/gh-inspect/pkg/models"
 )
@@ -24,15 +26,34 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	// TIER 1: Commit Velocity & Bus Factor (Time-bounded)
 	// This respects the cfg.Since window to avoid excessive API calls
 
+	result := models.AnalyzerResult{Name: a.Name()}
+
 	// Get repository metadata for stars/forks
 	repoData, err := client.GetRepository(ctx, repo.Owner, repo.Name)
 	if err != nil {
-		return models.AnalyzerResult{Name: a.Name()}, err
+		return result, err
 	}
 
 	commits, err := client.ListCommitsSince(ctx, repo.Owner, repo.Name, cfg.Since)
 	if err != nil {
-		return models.AnalyzerResult{Name: a.Name()}, err
+		// Check if this is an empty repository error
+		// GitHub returns 409 Conflict for empty repositories
+		var ghErr *github.ErrorResponse
+		if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 409 {
+			// Return empty metrics for empty repos instead of failing
+			result.Metrics = append(result.Metrics, models.Metric{
+				Key:          "commits_total",
+				Value:        0,
+				DisplayValue: "0",
+			})
+			result.Findings = append(result.Findings, models.Finding{
+				Type:     "empty_repository",
+				Severity: models.SeverityInfo,
+				Message:  "Repository is empty (no commits)",
+			})
+			return result, nil
+		}
+		return result, err
 	}
 
 	totalCommits := float64(len(commits))

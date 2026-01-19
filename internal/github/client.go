@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/go-github/v60/github"
@@ -17,7 +18,9 @@ var _ analysis.Client = (*ClientWrapper)(nil)
 
 // ClientWrapper adapts the google/go-github client to the analysis.Client interface.
 type ClientWrapper struct {
-	client *github.Client
+	client    *github.Client
+	repoCache map[string]*github.Repository
+	cacheMu   sync.RWMutex
 }
 
 // ResolveToken attempts to find a GitHub token from:
@@ -53,7 +56,8 @@ func NewClient(token string) *ClientWrapper {
 	}
 
 	return &ClientWrapper{
-		client: ghClient,
+		client:    ghClient,
+		repoCache: make(map[string]*github.Repository),
 	}
 }
 
@@ -178,8 +182,28 @@ func (c *ClientWrapper) ListCommitsSince(ctx context.Context, owner, repo string
 }
 
 func (c *ClientWrapper) GetRepository(ctx context.Context, owner, repo string) (*github.Repository, error) {
+	cacheKey := fmt.Sprintf("%s/%s", owner, repo)
+
+	// Check cache first
+	c.cacheMu.RLock()
+	if cached, ok := c.repoCache[cacheKey]; ok {
+		c.cacheMu.RUnlock()
+		return cached, nil
+	}
+	c.cacheMu.RUnlock()
+
+	// Fetch from API
 	r, _, err := c.client.Repositories.Get(ctx, owner, repo)
-	return r, err
+	if err != nil {
+		return nil, err
+	}
+
+	// Store in cache
+	c.cacheMu.Lock()
+	c.repoCache[cacheKey] = r
+	c.cacheMu.Unlock()
+
+	return r, nil
 }
 
 func (c *ClientWrapper) GetContent(ctx context.Context, owner, repo, path string) (*github.RepositoryContent, []*github.RepositoryContent, error) {

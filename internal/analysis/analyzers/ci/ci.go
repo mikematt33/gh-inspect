@@ -24,11 +24,19 @@ func (a *Analyzer) Name() string {
 func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo analysis.TargetRepository, cfg analysis.Config) (models.AnalyzerResult, error) {
 	result := models.AnalyzerResult{Name: "ci"}
 
-	// List workflow runs created since cfg.Since
-	// Note: ListRepositoryWorkflowRuns supports filtering by creation time via query string conceptually
-	// but the library options use specific fields. We can check created_range if library supports it or filter locally.
-	// The library opts has 'Created' string. "2023-01-01..*"
+	// First, get the all-time total count (just 1 API call, 1 result to get total)
+	allTimeOpts := &github.ListWorkflowRunsOptions{
+		ListOptions: github.ListOptions{
+			PerPage: 1, // We only need the TotalCount, not the actual runs
+		},
+	}
+	allTimeRuns, _, err := client.GetWorkflowRuns(ctx, repo.Owner, repo.Name, allTimeOpts)
+	var allTimeTotal int
+	if err == nil && allTimeRuns.TotalCount != nil {
+		allTimeTotal = *allTimeRuns.TotalCount
+	}
 
+	// Now fetch runs within the time window for analysis
 	sinceStr := fmt.Sprintf(">=%s", cfg.Since.Format("2006-01-02"))
 	opts := &github.ListWorkflowRunsOptions{
 		Created: sinceStr,
@@ -38,19 +46,24 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	}
 
 	// We might need to page to get all runs in window
-	// For simplicity in this iteration, let's just get the first page (up to 100 runs) or loop a few times.
-	// Users with massive CI churn might exceed this, but it's a start.
-
+	// Users can have many CI runs, so we'll fetch up to a reasonable limit
 	var allRuns []*github.WorkflowRun
+	var totalCount int // Actual total from API
+	maxRuns := 5000    // Increased limit to capture more data
 	for {
 		runs, resp, err := client.GetWorkflowRuns(ctx, repo.Owner, repo.Name, opts)
 		if err != nil {
 			return result, err
 		}
 
+		// Capture total count from first response
+		if totalCount == 0 && runs.TotalCount != nil {
+			totalCount = *runs.TotalCount
+		}
+
 		allRuns = append(allRuns, runs.WorkflowRuns...)
 
-		if resp.NextPage == 0 || len(allRuns) >= 500 { // Limit to 500 runs to avoid hitting limits hard
+		if resp.NextPage == 0 || len(allRuns) >= maxRuns {
 			break
 		}
 		opts.Page = resp.NextPage
@@ -65,6 +78,8 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		totalRuns            int
 		successCount         int
 		failureCount         int
+		cancelledCount       int
+		skippedCount         int
 		totalDuration        time.Duration
 		workflowCounts       = make(map[string]int)
 		workflowSuccess      = make(map[string]int)
@@ -84,7 +99,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		workflowCounts[wfName]++
 
 		conclusion := run.GetConclusion()
-		// statuses: success, failure, neutral, cancelled, timed_out, action_required
+		// statuses: success, failure, neutral, cancelled, timed_out, action_required, skipped
 
 		switch conclusion {
 		case "success":
@@ -106,6 +121,10 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		case "failure", "timed_out", "startup_failure":
 			failureCount++
 			workflowFail[wfName]++
+		case "cancelled":
+			cancelledCount++
+		case "skipped", "neutral":
+			skippedCount++
 		}
 	}
 
@@ -121,9 +140,45 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 
 	// Metrics
 	result.Metrics = append(result.Metrics, models.Metric{
-		Key:          "workflow_runs_total",
-		Value:        float64(totalRuns),
-		DisplayValue: fmt.Sprintf("%d", totalRuns),
+		Key:          "workflow_runs_all_time",
+		Value:        float64(allTimeTotal),
+		DisplayValue: fmt.Sprintf("%d", allTimeTotal),
+	})
+
+	result.Metrics = append(result.Metrics, models.Metric{
+		Key:          "workflow_runs_in_window",
+		Value:        float64(totalCount),
+		DisplayValue: fmt.Sprintf("%d", totalCount),
+	})
+
+	result.Metrics = append(result.Metrics, models.Metric{
+		Key:          "workflow_runs_analyzed",
+		Value:        float64(len(allRuns)),
+		DisplayValue: fmt.Sprintf("%d", len(allRuns)),
+	})
+
+	result.Metrics = append(result.Metrics, models.Metric{
+		Key:          "unique_workflows",
+		Value:        float64(len(workflowCounts)),
+		DisplayValue: fmt.Sprintf("%d", len(workflowCounts)),
+	})
+
+	result.Metrics = append(result.Metrics, models.Metric{
+		Key:          "success_count",
+		Value:        float64(successCount),
+		DisplayValue: fmt.Sprintf("%d", successCount),
+	})
+
+	result.Metrics = append(result.Metrics, models.Metric{
+		Key:          "failure_count",
+		Value:        float64(failureCount),
+		DisplayValue: fmt.Sprintf("%d", failureCount),
+	})
+
+	result.Metrics = append(result.Metrics, models.Metric{
+		Key:          "cancelled_count",
+		Value:        float64(cancelledCount),
+		DisplayValue: fmt.Sprintf("%d", cancelledCount),
 	})
 
 	result.Metrics = append(result.Metrics, models.Metric{
