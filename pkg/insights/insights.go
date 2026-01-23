@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/mikematt33/gh-inspect/pkg/models"
+	"github.com/mikematt33/gh-inspect/pkg/util"
 )
 
 type InsightLevel string
@@ -222,16 +223,14 @@ func ExplainScore(repo models.RepoResult) []ScoreComponent {
 			tips = "Investigate flaky tests and common failure patterns."
 		}
 
-		if srOk {
-			components = append(components, ScoreComponent{
-				Category:    "CI Stability",
-				Description: "Continuous Integration success rate",
-				Impact:      impact,
-				Current:     fmt.Sprintf("%.1f%%", successRate),
-				Target:      "≥90%",
-				Tips:        tips,
-			})
-		}
+		components = append(components, ScoreComponent{
+			Category:    "CI Stability",
+			Description: "Continuous Integration success rate",
+			Impact:      impact,
+			Current:     fmt.Sprintf("%.1f%%", successRate),
+			Target:      "≥90%",
+			Tips:        tips,
+		})
 	}
 
 	// Bus Factor (Weight: 20)
@@ -303,7 +302,7 @@ func ExplainScore(repo models.RepoResult) []ScoreComponent {
 
 		tips := "Add missing documentation files to improve project health."
 		if len(missingFileNames) > 0 {
-			tips = fmt.Sprintf("Missing: %v", missingFileNames[:min(3, len(missingFileNames))])
+			tips = fmt.Sprintf("Missing: %v", missingFileNames[:util.Min(3, len(missingFileNames))])
 		}
 
 		components = append(components, ScoreComponent{
@@ -346,11 +345,4 @@ func ExplainScore(repo models.RepoResult) []ScoreComponent {
 	}
 
 	return components
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

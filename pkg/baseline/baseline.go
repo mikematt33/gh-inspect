@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mikematt33/gh-inspect/pkg/models"
+	"github.com/mikematt33/gh-inspect/pkg/util"
 )
 
 // Baseline stores a historical report for comparison
@@ -184,9 +185,9 @@ func compareRepository(current, previous *models.RepoResult) RepositoryDelta {
 	prevFindings := countFindings(previous)
 
 	delta.FindingDiff = FindingChange{
-		Added:     max(0, currFindings-prevFindings),
-		Removed:   max(0, prevFindings-currFindings),
-		Unchanged: min(currFindings, prevFindings),
+		Added:     util.Max(0, currFindings-prevFindings),
+		Removed:   util.Max(0, prevFindings-currFindings),
+		Unchanged: util.Min(currFindings, prevFindings),
 	}
 
 	return delta
@@ -267,20 +268,6 @@ func countFindings(repo *models.RepoResult) int {
 		total += len(analyzer.Findings)
 	}
 	return total
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // GetDefaultBaselinePath returns the default path for baseline storage
