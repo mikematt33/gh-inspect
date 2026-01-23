@@ -6,6 +6,7 @@ import (
 
 	"github.com/mikematt33/gh-inspect/internal/config"
 	"github.com/mikematt33/gh-inspect/internal/report"
+	"github.com/mikematt33/gh-inspect/pkg/baseline"
 	"github.com/spf13/cobra"
 )
 
@@ -34,11 +35,15 @@ This command performs a deep dive into the specified repositories, gathering met
 The analysis runs concurrently for better performance and displays a progress bar.
 Use --quiet to suppress progress output or --verbose for detailed information.`,
 		Example: `  gh-inspect run owner/repo
-  gh-inspect run owner/repo1 owner/repo2 --deep
+  gh-inspect run owner/repo1 owner/repo2 --depth=deep
   gh-inspect run owner/repo --format=json > report.json
+  gh-inspect run owner/repo --format=markdown --explain
   gh-inspect run owner/repo --quiet --fail-under=80
+  gh-inspect run owner/repo --no-cache
   gh-inspect run owner/repo --include=activity,ci,security
-  gh-inspect run owner/repo --exclude=branches,releases`,
+  gh-inspect run owner/repo --exclude=branches,releases
+  gh-inspect run owner/repo --depth=shallow --max-prs=25
+  gh-inspect run owner/repo --depth=standard --max-workflow-runs=200`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if flagListAnalyzers {
 				return nil // Allow no args when listing analyzers
@@ -61,15 +66,30 @@ Use --quiet to suppress progress output or --verbose for detailed information.`,
 
 // Flags
 var (
-	flagFormat        string
-	flagSince         string
-	flagDeep          bool
-	flagFail          int
-	flagQuiet         bool
-	flagVerbose       bool
-	flagInclude       []string
-	flagExclude       []string
-	flagListAnalyzers bool
+	flagFormat           string
+	flagSince            string
+	flagDepth            string
+	flagMaxPRs           int
+	flagMaxIssues        int
+	flagMaxWorkflowRuns  int
+	flagFail             int
+	flagQuiet            bool
+	flagVerbose          bool
+	flagInclude          []string
+	flagExclude          []string
+	flagListAnalyzers    bool
+	flagCompareLast      bool
+	flagFailOnRegression bool
+	flagBaseline         string
+	flagSaveBaseline     bool
+	flagExplain          bool
+	flagNoCache          bool
+	// Filtering flags
+	flagFilterName      string
+	flagFilterLanguage  []string
+	flagFilterTopics    []string
+	flagFilterUpdated   string
+	flagFilterSkipForks bool
 )
 
 // listAnalyzers prints all available analyzers with descriptions
@@ -94,9 +114,9 @@ func listAnalyzers() {
 
 // registerAnalysisFlags adds common analysis flags to a command
 func registerAnalysisFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVarP(&flagFormat, "format", "f", "text", "Output format (text, json)")
+	cmd.Flags().StringVarP(&flagFormat, "format", "f", "text", "Output format (text, json, markdown)")
 	_ = cmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{"text", "json"}, cobra.ShellCompDirectiveNoFileComp
+		return []string{"text", "json", "markdown"}, cobra.ShellCompDirectiveNoFileComp
 	})
 
 	cmd.Flags().StringVarP(&flagSince, "since", "s", "30d", "Lookback window (e.g. 30d, 24h)")
@@ -104,7 +124,15 @@ func registerAnalysisFlags(cmd *cobra.Command) {
 		return []string{"30d", "90d", "180d", "24h", "720h"}, cobra.ShellCompDirectiveNoFileComp
 	})
 
-	cmd.Flags().BoolVarP(&flagDeep, "deep", "d", false, "Enable deep scanning (warning: consumes more API rate limit)")
+	cmd.Flags().StringVar(&flagDepth, "depth", "standard", "Analysis depth: shallow, standard, or deep")
+	_ = cmd.RegisterFlagCompletionFunc("depth", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"shallow", "standard", "deep"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	cmd.Flags().IntVar(&flagMaxPRs, "max-prs", 0, "Maximum PRs to analyze (0 = use depth default)")
+	cmd.Flags().IntVar(&flagMaxIssues, "max-issues", 0, "Maximum issues to fetch (0 = use depth default)")
+	cmd.Flags().IntVar(&flagMaxWorkflowRuns, "max-workflow-runs", 0, "Maximum CI runs to analyze (0 = use depth default)")
+
 	cmd.Flags().IntVar(&flagFail, "fail-under", 0, "Exit with error code 1 if average health score is below this value")
 
 	cmd.Flags().StringSliceVar(&flagInclude, "include", nil, "Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health)")
@@ -118,6 +146,27 @@ func registerAnalysisFlags(cmd *cobra.Command) {
 	})
 
 	cmd.Flags().BoolVar(&flagListAnalyzers, "list-analyzers", false, "List all available analyzers and exit")
+
+	// Baseline/Comparison flags
+	cmd.Flags().BoolVar(&flagCompareLast, "compare-last", false, "Compare with last saved baseline")
+	cmd.Flags().StringVar(&flagBaseline, "baseline", "", "Path to baseline file to compare against")
+	cmd.Flags().BoolVar(&flagSaveBaseline, "save-baseline", false, "Save this run as the new baseline")
+	cmd.Flags().BoolVar(&flagFailOnRegression, "fail-on-regression", false, "Exit with error if regression detected")
+
+	// Scoring transparency
+	cmd.Flags().BoolVar(&flagExplain, "explain", false, "Show detailed score breakdown and improvement tips")
+
+	// Caching
+	cmd.Flags().BoolVar(&flagNoCache, "no-cache", false, "Disable API response caching (forces fresh API calls)")
+}
+
+// registerFilterFlags adds repository filtering flags (for org and user commands)
+func registerFilterFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&flagFilterName, "filter-name", "", "Filter repositories by name (regex pattern)")
+	cmd.Flags().StringSliceVar(&flagFilterLanguage, "filter-language", nil, "Filter by primary language (comma-separated: go,python,javascript)")
+	cmd.Flags().StringSliceVar(&flagFilterTopics, "filter-topics", nil, "Filter by topics/tags (comma-separated)")
+	cmd.Flags().StringVar(&flagFilterUpdated, "filter-updated", "", "Filter by last update (e.g., 30d, 90d, 180d)")
+	cmd.Flags().BoolVar(&flagFilterSkipForks, "filter-skip-forks", false, "Skip forked repositories")
 }
 
 // shouldPrintInfo returns true if informational messages should be printed (not in quiet mode)
@@ -175,10 +224,6 @@ func init() {
 
 	rootCmd.AddCommand(runCmd)
 	registerAnalysisFlags(runCmd)
-
-	// Register compare command
-	rootCmd.AddCommand(compareCmd)
-	registerAnalysisFlags(compareCmd)
 }
 
 func runAnalysis(cmd *cobra.Command, args []string) {
@@ -188,11 +233,14 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 	}
 
 	opts := AnalysisOptions{
-		Repos:   args,
-		Since:   flagSince,
-		Deep:    flagDeep,
-		Include: flagInclude,
-		Exclude: flagExclude,
+		Repos:           args,
+		Since:           flagSince,
+		Depth:           flagDepth,
+		MaxPRs:          flagMaxPRs,
+		MaxIssues:       flagMaxIssues,
+		MaxWorkflowRuns: flagMaxWorkflowRuns,
+		Include:         flagInclude,
+		Exclude:         flagExclude,
 	}
 
 	fullReport, err := pipelineRunner(opts)
@@ -201,21 +249,72 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	// Handle baseline comparison if requested
+	var comparison *baseline.ComparisonResult
+	if flagCompareLast || flagBaseline != "" {
+		baselinePath := flagBaseline
+		if baselinePath == "" {
+			baselinePath = baseline.GetDefaultBaselinePath()
+		}
+
+		previousBaseline, err := baseline.Load(baselinePath)
+		if err != nil {
+			if shouldPrintInfo() {
+				fmt.Printf("⚠️  Could not load baseline for comparison: %v\n", err)
+			}
+		} else {
+			comparison = baseline.Compare(fullReport, previousBaseline)
+			if shouldPrintInfo() {
+				printComparison(comparison)
+			}
+		}
+	}
+
+	// Save baseline if requested
+	if flagSaveBaseline {
+		baselinePath := baseline.GetDefaultBaselinePath()
+		if err := baseline.Save(fullReport, baselinePath); err != nil {
+			fmt.Printf("⚠️  Failed to save baseline: %v\n", err)
+		} else if shouldPrintInfo() {
+			fmt.Printf("\n✅ Baseline saved to %s\n", baselinePath)
+		}
+	}
+
 	// 4. Render Output
 	var renderer report.Renderer
-	if flagFormat == "json" {
+	switch flagFormat {
+	case "json":
 		renderer = &report.JSONRenderer{}
-	} else {
+	case "markdown":
+		renderer = &report.MarkdownRenderer{}
+	default:
 		renderer = &report.TextRenderer{}
 	}
 
-	if err := renderer.Render(fullReport, os.Stdout); err != nil {
+	renderOpts := report.RenderOptions{
+		ShowExplanation: flagExplain,
+	}
+
+	if err := renderer.RenderWithOptions(fullReport, os.Stdout, renderOpts); err != nil {
 		fmt.Printf("Error rendering report: %v\n", err)
 	}
 
-	// Exit Code Check
+	// Write to GitHub Actions Step Summary if running in GitHub Actions
+	if githubStepSummary := os.Getenv("GITHUB_STEP_SUMMARY"); githubStepSummary != "" && flagFormat == "markdown" {
+		f, err := os.OpenFile(githubStepSummary, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err == nil {
+			defer func() { _ = f.Close() }()
+			_ = renderer.RenderWithOptions(fullReport, f, renderOpts)
+			if shouldPrintInfo() {
+				fmt.Println("\n✅ Results written to GitHub Actions step summary")
+			}
+		}
+	}
+
+	// Exit Code Check for health score
 	if flagFail > 0 && fullReport.Summary.AvgHealthScore < float64(flagFail) {
-		fmt.Printf("\n❌ Failure: Average health score (%.1f) is below threshold (%d).\n", fullReport.Summary.AvgHealthScore, flagFail)
+
+		fmt.Printf("\n❌ Failure: Regression detected compared to baseline.\n")
 		os.Exit(1)
 	}
 }

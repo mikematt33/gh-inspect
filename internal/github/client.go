@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/go-github/v60/github"
 	"github.com/mikematt33/gh-inspect/internal/analysis"
+	"github.com/mikematt33/gh-inspect/internal/cache"
 )
 
 // Ensure ClientWrapper satisfies the interface
@@ -21,6 +22,8 @@ type ClientWrapper struct {
 	client    *github.Client
 	repoCache map[string]*github.Repository
 	cacheMu   sync.RWMutex
+	diskCache *cache.Cache
+	useCache  bool
 }
 
 // ResolveToken attempts to find a GitHub token from:
@@ -48,6 +51,11 @@ func ResolveToken(configToken string) string {
 
 // NewClient creates a new GitHub client wrapper.
 func NewClient(token string) *ClientWrapper {
+	return NewClientWithCache(token, true)
+}
+
+// NewClientWithCache creates a new GitHub client wrapper with cache control.
+func NewClientWithCache(token string, useCache bool) *ClientWrapper {
 	var ghClient *github.Client
 	if token == "" {
 		ghClient = github.NewClient(nil)
@@ -55,10 +63,24 @@ func NewClient(token string) *ClientWrapper {
 		ghClient = github.NewClient(nil).WithAuthToken(token)
 	}
 
-	return &ClientWrapper{
+	wrapper := &ClientWrapper{
 		client:    ghClient,
 		repoCache: make(map[string]*github.Repository),
+		useCache:  useCache,
 	}
+
+	// Initialize disk cache if enabled
+	if useCache {
+		cachePath, err := cache.GetDefaultCachePath()
+		if err == nil {
+			c, err := cache.New(cachePath, 24*time.Hour)
+			if err == nil {
+				wrapper.diskCache = c
+			}
+		}
+	}
+
+	return wrapper
 }
 
 // checkRateLimit inspects the response for rate limit headers
@@ -183,9 +205,9 @@ func (c *ClientWrapper) ListCommitsSince(ctx context.Context, owner, repo string
 }
 
 func (c *ClientWrapper) GetRepository(ctx context.Context, owner, repo string) (*github.Repository, error) {
-	cacheKey := fmt.Sprintf("%s/%s", owner, repo)
+	cacheKey := fmt.Sprintf("repo:%s/%s", owner, repo)
 
-	// Check cache first
+	// Check in-memory cache first
 	c.cacheMu.RLock()
 	if cached, ok := c.repoCache[cacheKey]; ok {
 		c.cacheMu.RUnlock()
@@ -193,16 +215,33 @@ func (c *ClientWrapper) GetRepository(ctx context.Context, owner, repo string) (
 	}
 	c.cacheMu.RUnlock()
 
+	// Check disk cache if enabled
+	if c.diskCache != nil {
+		var cached github.Repository
+		if found, err := c.diskCache.Get(cacheKey, &cached); err == nil && found {
+			// Store in memory cache too
+			c.cacheMu.Lock()
+			c.repoCache[cacheKey] = &cached
+			c.cacheMu.Unlock()
+			return &cached, nil
+		}
+	}
+
 	// Fetch from API
 	r, _, err := c.client.Repositories.Get(ctx, owner, repo)
 	if err != nil {
 		return nil, err
 	}
 
-	// Store in cache
+	// Store in memory cache
 	c.cacheMu.Lock()
 	c.repoCache[cacheKey] = r
 	c.cacheMu.Unlock()
+
+	// Store in disk cache if enabled
+	if c.diskCache != nil {
+		_ = c.diskCache.Set(cacheKey, r)
+	}
 
 	return r, nil
 }

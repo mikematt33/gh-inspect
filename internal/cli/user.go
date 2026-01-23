@@ -21,7 +21,9 @@ Displays a progress bar during analysis. Use --quiet for CI/CD environments.`,
 	Example: `  gh-inspect user octocat
   gh-inspect user octocat --deep
   gh-inspect user octocat --quiet --format=json
-  gh-inspect user octocat --include=activity,prflow,ci`,
+  gh-inspect user octocat --include=activity,prflow,ci
+  gh-inspect user octocat --filter-language=javascript
+  gh-inspect user octocat --filter-skip-forks --filter-updated=180d`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if flagListAnalyzers {
 			return nil // Allow no args when listing analyzers
@@ -55,6 +57,7 @@ var getUserRepositories = func(username string) ([]*github.Repository, error) {
 func init() {
 	rootCmd.AddCommand(userCmd)
 	registerAnalysisFlags(userCmd)
+	registerFilterFlags(userCmd)
 }
 
 func runUserAnalysis(cmd *cobra.Command, args []string) {
@@ -73,24 +76,38 @@ func runUserAnalysis(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	var targetRepos []string
-	var archivedCount int
-	var forkCount int
-
-	for _, r := range repos {
-		if r.GetArchived() {
-			archivedCount++
-			continue
-		}
-		if r.GetFork() {
-			forkCount++
-		}
-		targetRepos = append(targetRepos, r.GetFullName())
+	// Apply Filters
+	filter, err := NewRepoFilter()
+	if err != nil {
+		fmt.Printf("Error creating filter: %v\n", err)
+		os.Exit(1)
 	}
 
+	targetRepos, stats := FilterRepositories(repos, filter)
+
 	if shouldPrintInfo() {
-		fmt.Printf("found %d total repositories\n", len(repos))
-		fmt.Printf("analyzing %d active repositories (%d archived, %d forks included)\n", len(targetRepos), archivedCount, forkCount)
+		fmt.Printf("found %d total repositories\n", stats.Total)
+		if stats.Archived > 0 {
+			fmt.Printf("  %d archived (skipped)\n", stats.Archived)
+		}
+		if stats.Forks > 0 && !flagFilterSkipForks {
+			fmt.Printf("  %d forks (included)\n", stats.Forks)
+		} else if flagFilterSkipForks {
+			fmt.Printf("  %d forks (filtered)\n", stats.Forks)
+		}
+		if stats.NameFiltered > 0 {
+			fmt.Printf("  %d filtered by name pattern\n", stats.NameFiltered)
+		}
+		if stats.LangFiltered > 0 {
+			fmt.Printf("  %d filtered by language\n", stats.LangFiltered)
+		}
+		if stats.TopicFiltered > 0 {
+			fmt.Printf("  %d filtered by topics\n", stats.TopicFiltered)
+		}
+		if stats.DateFiltered > 0 {
+			fmt.Printf("  %d filtered by update date\n", stats.DateFiltered)
+		}
+		fmt.Printf("analyzing %d repositories\n", stats.Passed)
 	}
 
 	if len(targetRepos) == 0 {
@@ -99,11 +116,14 @@ func runUserAnalysis(cmd *cobra.Command, args []string) {
 	}
 
 	opts := AnalysisOptions{
-		Repos:   targetRepos,
-		Since:   flagSince, // Uses flags from root (or init above)
-		Deep:    flagDeep,
-		Include: flagInclude,
-		Exclude: flagExclude,
+		Repos:           targetRepos,
+		Since:           flagSince, // Uses flags from root (or init above)
+		Depth:           flagDepth,
+		MaxPRs:          flagMaxPRs,
+		MaxIssues:       flagMaxIssues,
+		MaxWorkflowRuns: flagMaxWorkflowRuns,
+		Include:         flagInclude,
+		Exclude:         flagExclude,
 	}
 
 	fullReport, err := pipelineRunner(opts)

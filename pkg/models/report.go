@@ -46,12 +46,14 @@ type Metric struct {
 
 // Finding represents a qualitative insight or issue detection.
 type Finding struct {
-	Type        string   `json:"type"` // e.g. "stale_pr", "missing_owner"
-	Severity    Severity `json:"severity"`
-	Message     string   `json:"message"`
-	Location    string   `json:"location,omitempty"` // URL or file path
-	Actionable  bool     `json:"actionable"`
-	Remediation string   `json:"remediation,omitempty"` // Advice on how to fix
+	Type             string   `json:"type"` // e.g. "stale_pr", "missing_owner"
+	Severity         Severity `json:"severity"`
+	Message          string   `json:"message"`
+	Location         string   `json:"location,omitempty"` // URL or file path
+	Actionable       bool     `json:"actionable"`
+	Remediation      string   `json:"remediation,omitempty"`       // Advice on how to fix
+	Explanation      string   `json:"explanation,omitempty"`       // Why this matters
+	SuggestedActions []string `json:"suggested_actions,omitempty"` // 1-2 concrete next steps
 }
 
 type Severity string

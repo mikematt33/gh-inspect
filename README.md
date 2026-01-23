@@ -9,10 +9,17 @@
 ## 🚀 Key Features
 
 - **Engineering Health Score**: Aggregates hundreds of data points into a single 0-100 score.
+- **Baseline & Regression Detection**: Track score changes over time and detect regressions automatically.
+- **Score Explanation**: Detailed breakdown showing why your score changed with improvement tips.
 - **Bus Factor Analysis**: Identifies if your project relies too heavily on single contributors.
 - **PR Velocity**: Measures Cycle Time, Reviews per PR, and identifies "Giant PRs" that slow down development.
 - **Zombie Detection**: Finds stale issues and PRs that are clogging up your backlog.
 - **CI Insights**: Tracks workflow success rates, expensive runs, and stability.
+- **Smart Depth Control**: Choose between shallow, standard, or deep analysis with fine-grained API usage control.
+- **Recommendations Engine**: Get actionable suggestions with explanations for every finding.
+- **GitHub Actions Integration**: Markdown output optimized for PR comments and Actions summaries.
+- **Repository Filtering**: Filter org/user scans by name, language, topics, and update date.
+- **Disk-based Caching**: Intelligent 24-hour cache reduces API calls by 30-50%.
 - **CI/CD Gates**: Use `--fail-under` to block merges if repository health drops below a certain threshold.
 
 ## 🛠️ Installation
@@ -139,10 +146,19 @@ gh-inspect run owner/repo [flags]
 
 **Flags:**
 
-- `-d, --deep`: Enable deep scanning (paginated issues/PRs).
-- `-f, --format string`: Output format (text, json) (default "text").
+- `--depth string`: Analysis depth: shallow, standard, or deep (default "standard").
+- `--max-prs int`: Maximum PRs to analyze (0 = use depth default).
+- `--max-issues int`: Maximum issues to fetch (0 = use depth default).
+- `--max-workflow-runs int`: Maximum CI runs to analyze (0 = use depth default).
+- `-f, --format string`: Output format (text, json, markdown) (default "text").
 - `-s, --since string`: Lookback window (e.g. 30d, 24h) (default "30d").
+- `--explain`: Show detailed score breakdown and improvement tips.
+- `--baseline string`: Path to baseline file to compare against.
+- `--save-baseline`: Save this run as the new baseline.
+- `--compare-last`: Compare with last saved baseline.
+- `--fail-on-regression`: Exit with error if regression detected.
 - `--fail-under int`: Exit with error code 1 if average health score is below this value.
+- `--no-cache`: Disable API response caching (forces fresh API calls).
 - `--include strings`: Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
 - `--exclude strings`: Exclude specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
 - `--list-analyzers`: List all available analyzers with descriptions and exit.
@@ -183,7 +199,24 @@ gh-inspect org organization [flags]
 
 **Flags:**
 
-- Uses the same flags as `run` (`--deep`, `--format`, `--since`, `--fail-under`, `--include`, `--exclude`).
+- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
+- **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
+
+**Filtering Examples:**
+
+```bash
+# Only analyze Go and Python repositories
+gh-inspect org my-org --filter-language=go,python
+
+# Filter by name pattern (regex)
+gh-inspect org my-org --filter-name="^api-.*"
+
+# Only production repositories updated in last 90 days
+gh-inspect org my-org --filter-topics=production --filter-updated=90d
+
+# Skip forked repositories
+gh-inspect org my-org --filter-skip-forks
+```
 
 #### `user` - User Scan
 
@@ -201,7 +234,8 @@ gh-inspect user username [flags]
 
 **Flags:**
 
-- Uses the same flags as `run` (`--deep`, `--format`, `--since`, `--fail-under`, `--include`, `--exclude`).
+- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
+- **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
 
 #### `compare` - Compare Repositories
 
@@ -213,9 +247,13 @@ gh-inspect compare owner/repo1 owner/repo2 [flags]
 
 **Flags:**
 
-- `-d, --deep`: Enable deep scanning.
-- `-f, --format string`: Output format (text, json).
+- `--depth string`: Analysis depth.
+- `--max-prs int`, `--max-issues int`, `--max-workflow-runs int`: Resource limits.
+- `-f, --format string`: Output format (text, json, markdown).
 - `-s, --since string`: Lookback window.
+- `--explain`: Show score breakdown.
+- `--baseline string`, `--save-baseline`, `--compare-last`, `--fail-on-regression`: Baseline comparison.
+- `--list-analyzers`: List available analyzers.
 
 #### `update`
 
@@ -227,6 +265,36 @@ gh-inspect update
 
 # Check for updates without installing
 gh-inspect update --check
+```
+
+#### `cache` - Manage API Cache
+
+Manage the disk-based cache for GitHub API responses. The cache reduces API rate limit usage and speeds up repeated analyses.
+
+```bash
+# Show cache statistics
+gh-inspect cache stats
+
+# Clear all cached data
+gh-inspect cache clear
+
+# Show stats before clearing
+gh-inspect cache clear --stats
+```
+
+**Cache Details:**
+
+- **Location:** `~/.gh-inspect/cache`
+- **TTL:** 24 hours (automatically expires)
+- **Scope:** Repository metadata and static data
+- **Benefits:** Reduces API calls by 30-50% on repeated runs
+
+**Disable Cache:**
+
+Use `--no-cache` flag to bypass cache and force fresh API calls:
+
+```bash
+gh-inspect run owner/repo --no-cache
 ```
 
 #### `uninstall`
@@ -297,15 +365,74 @@ Initialize or manage configuration. See [Configuration](#-configuration) for det
 
 ### Examples
 
-**Deep Scan (Last 90 days)**
-Performs a more intensive scan, including issue pagination and deep metrics.
+**Basic Analysis**
+Quick analysis with standard depth (100 PRs, 200 issues, 100 workflow runs).
 
 ```bash
-gh-inspect run owner/repo --deep --since=90d
+gh-inspect run owner/repo
+```
+
+**Shallow Scan (Fast)**
+Minimal API usage for quick checks (50 PRs, 100 issues, 50 workflow runs).
+
+```bash
+gh-inspect run owner/repo --depth=shallow
+```
+
+**Deep Scan (Comprehensive)**
+Thorough analysis with extensive pagination (500 PRs, 1000 issues, 500 workflow runs).
+
+```bash
+gh-inspect run owner/repo --depth=deep --since=90d
+```
+
+**Custom Depth Limits**
+Fine-tune API usage for specific needs.
+
+```bash
+# Standard depth but only 25 PRs
+gh-inspect run owner/repo --depth=standard --max-prs=25
+
+# Deep scan but limit workflow runs to save API calls
+gh-inspect run owner/repo --depth=deep --max-workflow-runs=200
+```
+
+**Score Explanation**
+Understand what's affecting your health score.
+
+```bash
+gh-inspect run owner/repo --explain
+```
+
+**Baseline & Regression Detection**
+Track score changes over time and catch regressions.
+
+```bash
+# First run - establish baseline
+gh-inspect run owner/repo --save-baseline
+
+# Later runs - compare against baseline
+gh-inspect run owner/repo --compare-last
+
+# Fail CI if score dropped
+gh-inspect run owner/repo --compare-last --fail-on-regression
+
+# Save custom baseline file
+gh-inspect run owner/repo --save-baseline --baseline=./baseline-prod.json
+
+# Compare against specific baseline
+gh-inspect run owner/repo --baseline=./baseline-prod.json
+```
+
+**Markdown Output for GitHub Actions**
+Generate rich reports for PR comments and Actions summaries.
+
+```bash
+gh-inspect run owner/repo --format=markdown --explain > report.md
 ```
 
 **JSON Output**
-Useful for piping into other tools `jq`.
+Useful for piping into other tools like `jq`.
 
 ```bash
 gh-inspect run owner/repo --format=json > report.json
@@ -352,6 +479,46 @@ Skip analyzers you don't need to save API rate limits and time.
 gh-inspect run owner/repo --exclude=releases,branches
 ```
 
+**Use Caching for Faster Repeated Runs**
+The cache automatically stores API responses for 24 hours.
+
+```bash
+# First run (fetches from API)
+gh-inspect run owner/repo
+
+# Second run within 24 hours (uses cache - much faster!)
+gh-inspect run owner/repo
+
+# Force fresh data (bypass cache)
+gh-inspect run owner/repo --no-cache
+
+# View cache stats
+gh-inspect cache stats
+
+# Clear cache manually
+gh-inspect cache clear
+```
+
+**Repository Filtering (Org/User Commands)**
+Filter which repositories to analyze based on multiple criteria.
+
+```bash
+# Only analyze Go and Python repositories
+gh-inspect org my-org --filter-language=go,python
+
+# Filter by name pattern (regex)
+gh-inspect org my-org --filter-name="^api-.*"
+
+# Only production repositories updated in last 90 days
+gh-inspect org my-org --filter-topics=production --filter-updated=90d
+
+# Skip forked repositories
+gh-inspect org my-org --filter-skip-forks
+
+# Combine multiple filters
+gh-inspect user john --filter-language=typescript --filter-topics=web --filter-updated=30d
+```
+
 **Available Analyzers:**
 
 - `activity` - Commit patterns, contributors, bus factor
@@ -369,6 +536,92 @@ Get detailed progress information during long-running analyses.
 ```bash
 gh-inspect run owner/org --verbose
 ```
+
+### GitHub Actions Integration
+
+Use `gh-inspect` in your GitHub Actions workflows for automated repository health monitoring. The tool automatically integrates with GitHub's step summary when running in Actions.
+
+**Markdown Output Features**
+
+Generate markdown reports with rich formatting, suitable for PR comments and GitHub summaries:
+
+- **Score badges** with color-coded emojis (🟢 90+, 🟡 70-89, 🟠 50-69, 🔴 <50)
+- **Collapsible findings** grouped by analyzer for easy navigation
+- **Detailed explanations** for each finding with "Why this matters"
+- **Actionable suggestions** with numbered steps for improvement
+- **Key metrics tables** organized by category
+- **Recommendations section** with prioritized insights
+
+```bash
+gh-inspect run owner/repo --format=markdown --explain > report.md
+```
+
+When running in GitHub Actions with `--format=markdown`, the output is automatically written to `$GITHUB_STEP_SUMMARY` for enhanced visibility.
+
+**Example Workflow with All Features**
+
+Create `.github/workflows/health-check.yml`:
+
+```yaml
+name: Repository Health Check
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Weekly on Mondays
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install gh-inspect
+        run: |
+          curl -sfL https://raw.githubusercontent.com/mikematt33/gh-inspect/main/install.sh | sh
+          echo "$PWD/bin" >> $GITHUB_PATH
+
+      - name: Run analysis with baseline comparison
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Shallow scan for PRs, deep analysis for main
+          DEPTH="${{ github.event_name == 'pull_request' && 'shallow' || 'deep' }}"
+
+          gh-inspect run ${{ github.repository }} \
+            --format=markdown \
+            --explain \
+            --depth=$DEPTH \
+            --compare-last \
+            --fail-on-regression \
+            --fail-under=70 \
+            --save-baseline
+
+      - name: Upload baseline artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-baseline
+          path: ~/.gh-inspect/baseline.json
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('report.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
+```
+
+See the complete [example workflow](.github/workflows/health-check.yml) for more details.
 
 ## ⚙️ Configuration
 
@@ -550,11 +803,88 @@ Monitors branch management hygiene:
 
 All analyzers work with `run`, `org`, `user`, and `compare` commands!
 
+## 💡 Recommendations Engine
+
+Every finding includes rich, actionable recommendations to help you improve your repository health.
+
+### What You Get
+
+**Explanations:**
+Each finding explains _why_ it matters, not just what the problem is.
+
+```
+🚨 bus_factor_risk: Single contributor risk: 50% of commits are by 1 person
+   Why: A bus factor of 1 means that if your primary contributor is unavailable,
+        development could stall. This creates single points of failure for your project.
+```
+
+**Suggested Actions:**
+1-2 concrete, specific steps you can take immediately.
+
+```
+   Actions:
+   1. Set up pair programming sessions for knowledge transfer
+   2. Rotate code review responsibilities across team members
+```
+
+### Coverage
+
+Recommendations are provided for:
+
+- **Bus Factor Risk** - Knowledge sharing strategies
+- **Stale PRs** - Review process improvements
+- **Giant PRs** - Code organization tips
+- **Missing Files** - Documentation templates and guides
+- **CI Failures** - Debugging and hotfix workflows
+- **Branch Protection** - Security configuration steps
+- **Slow Builds** - Performance optimization techniques
+- **CI Instability** - Test reliability improvements
+
+All recommendations appear in:
+
+- Text output (terminal)
+- JSON output (programmatic access)
+- Markdown output (GitHub Actions, PR comments)
+
 ## ⚡ Performance & API Optimization
 
 gh-inspect is designed to provide comprehensive analysis while minimizing API calls and respecting GitHub's rate limits.
 
 ### Smart API Call Management
+
+**Depth Control:**
+
+Choose the right analysis depth for your needs:
+
+- **Shallow** (`--depth=shallow`): 50 PRs, 100 issues, 50 workflow runs
+  - Best for: Quick health checks, CI pipelines, frequent monitoring
+  - API cost: ~15-25 calls per repository
+- **Standard** (`--depth=standard`, default): 100 PRs, 200 issues, 100 workflow runs
+  - Best for: Regular analysis, balanced insights
+  - API cost: ~25-40 calls per repository
+- **Deep** (`--depth=deep`): 500 PRs, 1000 issues, 500 workflow runs
+  - Best for: Comprehensive audits, quarterly reviews
+  - API cost: ~50-100 calls per repository
+
+**Manual Overrides:**
+
+Fine-tune limits for specific scenarios:
+
+```bash
+# Standard depth but reduce PR analysis
+gh-inspect run owner/repo --depth=standard --max-prs=25
+
+# Deep analysis but limit workflow runs to save API calls
+gh-inspect run owner/repo --depth=deep --max-workflow-runs=200
+```
+
+**Disk-Based Caching:**
+
+- 24-hour TTL reduces API calls by 30-50% on repeated runs
+- Automatic cache invalidation after expiration
+- Stores repository metadata and static data
+- Location: `~/.gh-inspect/cache`
+- Bypass with `--no-cache` flag
 
 **Repository Data Caching:**
 
@@ -570,14 +900,14 @@ gh-inspect is designed to provide comprehensive analysis while minimizing API ca
 
 **Intelligent Pagination:**
 
-- Workflow runs: Up to 5,000 analyzed (with accurate all-time total from API)
-- Issues: Automatically paginated with 100 per page
-- Pull requests: Smart sampling for large repositories
+- Workflow runs: Configurable per depth (50-500), with accurate all-time total from API
+- Issues: Configurable per depth (100-1000)
+- Pull requests: Configurable per depth (50-500)
 - Commits: Time-bounded to analysis window
 
 **Rate Limit Protection:**
 
-- Pre-flight checks estimate API cost before analysis
+- Pre-flight checks estimate API cost based on depth configuration
 - Warns if rate limit might be exhausted
 - Automatic rate limit monitoring with sleep/retry on exhaustion
 - Real-time rate limit display in `auth status` command
@@ -586,13 +916,17 @@ gh-inspect is designed to provide comprehensive analysis while minimizing API ca
 
 For a **moderately active repository** (50-100 commits/week) with default 30d window:
 
-- **Minimal scan**: ~15-25 API calls per repository
-- **Deep scan**: ~30-50 API calls per repository
+- **Shallow** (`--depth=shallow`): ~15-25 API calls per repository
+- **Standard** (`--depth=standard`): ~25-40 API calls per repository
+- **Deep** (`--depth=deep`): ~50-100 API calls per repository
+
+**With Caching:** Second runs within 24 hours use 30-50% fewer API calls.
 
 With authentication, you have 5,000 requests/hour, which allows analyzing:
 
-- **200-300 repositories** in a single organization scan
-- **Multiple teams** across different analysis windows
+- **Shallow**: 200-300+ repositories in a single scan
+- **Standard**: 125-200 repositories in a single scan
+- **Deep**: 50-100 repositories in a single scan
 
 ### Empty Repository Handling
 

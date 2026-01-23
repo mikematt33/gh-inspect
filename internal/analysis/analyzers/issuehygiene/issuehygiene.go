@@ -31,10 +31,14 @@ func (a *Analyzer) Name() string {
 func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo analysis.TargetRepository, cfg analysis.Config) (models.AnalyzerResult, error) {
 	// 1. Fetch Open Issues (Oldest Updated first, to find stale/zombie)
 	// Limit to reasonable number to avoid excessive API calls
-	// Deep scan: 200 issues, Normal scan: 100 issues
-	maxIssues := 100
-	if cfg.IncludeDeep {
-		maxIssues = 200
+	// Use MaxIssues from depth config
+	maxIssues := cfg.DepthConfig.MaxIssues
+	if maxIssues == 0 {
+		// Fallback to old behavior if not configured
+		maxIssues = 100
+		if cfg.IncludeDeep {
+			maxIssues = 200
+		}
 	}
 
 	openOpts := &github.IssueListByRepoOptions{

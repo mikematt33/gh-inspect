@@ -1,0 +1,77 @@
+name: Repository Health Check
+
+on:
+  schedule:
+    # Run weekly on Mondays at 9 AM UTC
+    - cron: "0 9 * * 1"
+  workflow_dispatch: # Allow manual triggers
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write # Needed for PR comments
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install gh-inspect
+        run: |
+          curl -sfL https://raw.githubusercontent.com/mikematt33/gh-inspect/main/install.sh | sh
+          echo "$PWD/bin" >> $GITHUB_PATH
+
+      - name: Run repository analysis
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Use shallow scan for PRs, standard for scheduled runs
+          DEPTH="${{ github.event_name == 'pull_request' && 'shallow' || 'standard' }}"
+
+          gh-inspect run ${{ github.repository }} \
+            --format=markdown \
+            --explain \
+            --depth=$DEPTH \
+            --compare-last \
+            --fail-on-regression \
+            --fail-under=70 \
+            --save-baseline \
+            > analysis-report.md
+
+      - name: Upload baseline artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-baseline
+          path: ~/.gh-inspect/baseline.json
+
+      - name: Comment PR with analysis
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('analysis-report.md', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
+
+      - name: Upload analysis report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-analysis-report
+          path: analysis-report.md
+
+      - name: Check health score
+        if: failure()
+        run: |
+          echo "❌ Repository health score is below threshold"
+          exit 1

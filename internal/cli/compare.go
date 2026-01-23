@@ -36,11 +36,14 @@ Minimum 2 repositories required. Supports all analysis flags including --quiet a
 
 func runComparison(cmd *cobra.Command, args []string) {
 	opts := AnalysisOptions{
-		Repos:   args,
-		Since:   flagSince,
-		Deep:    flagDeep,
-		Include: flagInclude,
-		Exclude: flagExclude,
+		Repos:           args,
+		Since:           flagSince,
+		Depth:           flagDepth,
+		MaxPRs:          flagMaxPRs,
+		MaxIssues:       flagMaxIssues,
+		MaxWorkflowRuns: flagMaxWorkflowRuns,
+		Include:         flagInclude,
+		Exclude:         flagExclude,
 	}
 
 	fullReport, err := pipelineRunner(opts)

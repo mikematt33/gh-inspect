@@ -38,11 +38,14 @@ func getClientWithToken(cfg *config.Config) (*ghclient.ClientWrapper, error) {
 
 // AnalysisOptions contains the configuration for running repository analysis.
 type AnalysisOptions struct {
-	Repos   []string
-	Since   string
-	Deep    bool
-	Include []string
-	Exclude []string
+	Repos           []string
+	Since           string
+	Depth           string
+	MaxPRs          int
+	MaxIssues       int
+	MaxWorkflowRuns int
+	Include         []string
+	Exclude         []string
 }
 
 var pipelineRunner = RunAnalysisPipeline
@@ -115,9 +118,14 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 		return nil, fmt.Errorf("invalid time duration format: %s. Use '30d' or '720h'", opts.Since)
 	}
 
+	// Get depth configuration
+	depthCfg := analysis.GetDepthConfig(opts.Depth)
+	depthCfg = depthCfg.ApplyOverrides(opts.MaxPRs, opts.MaxIssues, opts.MaxWorkflowRuns)
+
 	analysisCfg := analysis.Config{
 		Since:       time.Now().Add(-duration),
-		IncludeDeep: opts.Deep,
+		IncludeDeep: depthCfg.IncludeDeep,
+		DepthConfig: depthCfg,
 	}
 
 	// 3. Setup Dependencies
@@ -125,7 +133,7 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	if token == "" {
 		return nil, fmt.Errorf("no GitHub token found. Please run 'gh-inspect auth' to login")
 	}
-	client := ghclient.NewClient(token)
+	client := ghclient.NewClientWithCache(token, !flagNoCache)
 
 	// Pre-flight check for rate limits
 	limits, err := client.GetRateLimit(context.Background())
@@ -135,7 +143,7 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	} else {
 		// Estimate cost based on scan depth
 		costPerRepo := 25 // Base estimate (commits, health, basic stats)
-		if opts.Deep {
+		if depthCfg.IncludeDeep {
 			costPerRepo = 150 // Deep scan includes issue pagination, reviews, etc.
 		}
 

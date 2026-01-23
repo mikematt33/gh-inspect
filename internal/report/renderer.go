@@ -14,12 +14,19 @@ import (
 type Format string
 
 const (
-	FormatJSON Format = "json"
-	FormatText Format = "text"
+	FormatJSON     Format = "json"
+	FormatText     Format = "text"
+	FormatMarkdown Format = "markdown"
 )
+
+// RenderOptions contains options for rendering reports
+type RenderOptions struct {
+	ShowExplanation bool
+}
 
 type Renderer interface {
 	Render(report *models.Report, w io.Writer) error
+	RenderWithOptions(report *models.Report, w io.Writer, opts RenderOptions) error
 }
 
 func NewRenderer(f Format) Renderer {
@@ -28,6 +35,8 @@ func NewRenderer(f Format) Renderer {
 		return &JSONRenderer{}
 	case FormatText:
 		return &TextRenderer{}
+	case FormatMarkdown:
+		return &MarkdownRenderer{}
 	default:
 		return &TextRenderer{}
 	}
@@ -36,6 +45,10 @@ func NewRenderer(f Format) Renderer {
 type JSONRenderer struct{}
 
 func (r *JSONRenderer) Render(report *models.Report, w io.Writer) error {
+	return r.RenderWithOptions(report, w, RenderOptions{})
+}
+
+func (r *JSONRenderer) RenderWithOptions(report *models.Report, w io.Writer, opts RenderOptions) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(report)
@@ -44,6 +57,10 @@ func (r *JSONRenderer) Render(report *models.Report, w io.Writer) error {
 type TextRenderer struct{}
 
 func (r *TextRenderer) Render(report *models.Report, w io.Writer) error {
+	return r.RenderWithOptions(report, w, RenderOptions{})
+}
+
+func (r *TextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opts RenderOptions) error {
 	if len(report.Repositories) == 0 {
 		_, _ = fmt.Fprintln(w, "No repositories analyzed.")
 		return nil
@@ -87,6 +104,19 @@ func (r *TextRenderer) Render(report *models.Report, w io.Writer) error {
 						icon = "⚠️"
 					}
 					_, _ = fmt.Fprintf(w, "    %s %s: %s\n", icon, f.Type, f.Message)
+
+					// Show explanation if available
+					if f.Explanation != "" {
+						_, _ = fmt.Fprintf(w, "       Why: %s\n", f.Explanation)
+					}
+
+					// Show suggested actions if available
+					if len(f.SuggestedActions) > 0 {
+						_, _ = fmt.Fprintln(w, "       Actions:")
+						for i, action := range f.SuggestedActions {
+							_, _ = fmt.Fprintf(w, "       %d. %s\n", i+1, action)
+						}
+					}
 				}
 			} else {
 				_, _ = fmt.Fprintln(w, "  No issues found.")
@@ -99,6 +129,38 @@ func (r *TextRenderer) Render(report *models.Report, w io.Writer) error {
 
 		_, _ = fmt.Fprintf(w, "\n[ opinionated-insights ]\n")
 		_, _ = fmt.Fprintf(w, "  Engineering Health Score: %d/100\n", engScore)
+
+		// Show score explanation if requested
+		if opts.ShowExplanation {
+			scoreComponents := insights.ExplainScore(repo)
+			if len(scoreComponents) > 0 {
+				_, _ = fmt.Fprintln(w, "")
+				_, _ = fmt.Fprintln(w, "  Score Breakdown:")
+				_, _ = fmt.Fprintln(w, "  "+"─────────────────────────────────────────────────────")
+
+				totalImpact := 0
+				for _, comp := range scoreComponents {
+					totalImpact += comp.Impact
+
+					// Show category and impact
+					impactStr := ""
+					if comp.Impact > 0 {
+						impactStr = fmt.Sprintf(" [-%d pts]", comp.Impact)
+					} else {
+						impactStr = " [✓]"
+					}
+					_, _ = fmt.Fprintf(w, "  • %s%s\n", comp.Category, impactStr)
+					_, _ = fmt.Fprintf(w, "    Current: %s | Target: %s\n", comp.Current, comp.Target)
+
+					if comp.Tips != "" {
+						_, _ = fmt.Fprintf(w, "    💡 %s\n", comp.Tips)
+					}
+					_, _ = fmt.Fprintln(w, "")
+				}
+
+				_, _ = fmt.Fprintf(w, "  Final Score: 100 - %d = %d/100\n", totalImpact, engScore)
+			}
+		}
 
 		if len(repoInsights) > 0 {
 			_, _ = fmt.Fprintln(w, "")

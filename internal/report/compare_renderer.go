@@ -12,6 +12,10 @@ import (
 type ComparisonTextRenderer struct{}
 
 func (r *ComparisonTextRenderer) Render(report *models.Report, w io.Writer) error {
+	return r.RenderWithOptions(report, w, RenderOptions{})
+}
+
+func (r *ComparisonTextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opts RenderOptions) error {
 	if len(report.Repositories) == 0 {
 		_, _ = fmt.Fprintln(w, "No repositories to compare.")
 		return nil
