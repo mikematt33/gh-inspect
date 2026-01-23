@@ -277,11 +277,11 @@ func TestExplainScore_CIStability(t *testing.T) {
 
 func TestExplainScore_BusFactor(t *testing.T) {
 	tests := []struct {
-		name                string
-		busFactor           float64
-		activeContributors  float64
-		expectedImpact      int
-		expectTips          bool
+		name               string
+		busFactor          float64
+		activeContributors float64
+		expectedImpact     int
+		expectTips         bool
 	}{
 		{
 			name:               "Healthy bus factor",

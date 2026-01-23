@@ -86,33 +86,33 @@ func TestRepoFilterMatches(t *testing.T) {
 	now := time.Now()
 
 	tests := []struct {
-		name           string
-		filter         *RepoFilter
-		repo           *github.Repository
-		expectedMatch  bool
+		name          string
+		filter        *RepoFilter
+		repo          *github.Repository
+		expectedMatch bool
 	}{
 		{
-			name:   "no filters - should pass",
-			filter: &RepoFilter{},
-			repo:   createTestRepo("test-repo", "Go", []string{}, false, false, now),
+			name:          "no filters - should pass",
+			filter:        &RepoFilter{},
+			repo:          createTestRepo("test-repo", "Go", []string{}, false, false, now),
 			expectedMatch: true,
 		},
 		{
-			name:   "archived repo - should fail",
-			filter: &RepoFilter{},
-			repo:   createTestRepo("archived-repo", "Go", []string{}, true, false, now),
+			name:          "archived repo - should fail",
+			filter:        &RepoFilter{},
+			repo:          createTestRepo("archived-repo", "Go", []string{}, true, false, now),
 			expectedMatch: false,
 		},
 		{
-			name:   "fork with skip forks - should fail",
-			filter: &RepoFilter{SkipForks: true},
-			repo:   createTestRepo("forked-repo", "Go", []string{}, false, true, now),
+			name:          "fork with skip forks - should fail",
+			filter:        &RepoFilter{SkipForks: true},
+			repo:          createTestRepo("forked-repo", "Go", []string{}, false, true, now),
 			expectedMatch: false,
 		},
 		{
-			name:   "fork without skip forks - should pass",
-			filter: &RepoFilter{SkipForks: false},
-			repo:   createTestRepo("forked-repo", "Go", []string{}, false, true, now),
+			name:          "fork without skip forks - should pass",
+			filter:        &RepoFilter{SkipForks: false},
+			repo:          createTestRepo("forked-repo", "Go", []string{}, false, true, now),
 			expectedMatch: true,
 		},
 		{

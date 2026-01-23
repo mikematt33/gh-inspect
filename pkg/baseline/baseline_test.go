@@ -219,7 +219,7 @@ func TestCompareMetricChanges(t *testing.T) {
 						Name: "ci",
 						Metrics: []models.Metric{
 							{Key: "success_rate", Value: 95.0}, // Improved
-							{Key: "failure_count", Value: 5.0},  // Improved (lower is better)
+							{Key: "failure_count", Value: 5.0}, // Improved (lower is better)
 						},
 					},
 				},
@@ -406,7 +406,7 @@ func TestIsImprovement(t *testing.T) {
 		{"success_rate", 10.0, true},
 		{"success_rate", -10.0, false},
 		{"merge_ratio", 2.0, true},
-		
+
 		// Lower is better metrics
 		{"cycle_time", -1.0, true},
 		{"cycle_time", 1.0, false},
@@ -416,7 +416,7 @@ func TestIsImprovement(t *testing.T) {
 		{"stale_issues", 2.0, false},
 		{"zombie_issues", -3.0, true},
 		{"zombie_issues", 3.0, false},
-		
+
 		// Default (higher is better)
 		{"unknown_metric", 5.0, true},
 		{"unknown_metric", -5.0, false},
@@ -461,7 +461,7 @@ func TestGetDefaultBaselinePath(t *testing.T) {
 	if path == "" {
 		t.Error("Expected non-empty default baseline path")
 	}
-	
+
 	// Should contain .gh-inspect directory
 	if !filepath.IsAbs(path) && path != ".gh-inspect/baseline.json" {
 		t.Errorf("Expected absolute path or '.gh-inspect/baseline.json', got '%s'", path)
@@ -549,58 +549,58 @@ func TestCompareWithZeroMetrics(t *testing.T) {
 
 func TestRegressionDetectionThresholds(t *testing.T) {
 	tests := []struct {
-		name                string
-		healthScoreDelta    float64
-		ciSuccessRateDelta  float64
-		zombieIssueDelta    int
-		improvedMetrics     int
-		degradedMetrics     int
-		expectRegression    bool
+		name               string
+		healthScoreDelta   float64
+		ciSuccessRateDelta float64
+		zombieIssueDelta   int
+		improvedMetrics    int
+		degradedMetrics    int
+		expectRegression   bool
 	}{
 		{
-			name:             "No regression - small changes",
-			healthScoreDelta: -2.0,
+			name:               "No regression - small changes",
+			healthScoreDelta:   -2.0,
 			ciSuccessRateDelta: -3.0,
-			zombieIssueDelta: 1,
-			improvedMetrics: 5,
-			degradedMetrics: 2,
-			expectRegression: false,
+			zombieIssueDelta:   1,
+			improvedMetrics:    5,
+			degradedMetrics:    2,
+			expectRegression:   false,
 		},
 		{
-			name:             "Regression - health score drop > 5",
-			healthScoreDelta: -6.0,
+			name:               "Regression - health score drop > 5",
+			healthScoreDelta:   -6.0,
 			ciSuccessRateDelta: 0.0,
-			zombieIssueDelta: 0,
-			improvedMetrics: 10,
-			degradedMetrics: 1,
-			expectRegression: true,
+			zombieIssueDelta:   0,
+			improvedMetrics:    10,
+			degradedMetrics:    1,
+			expectRegression:   true,
 		},
 		{
-			name:             "Regression - CI success rate drop > 10",
-			healthScoreDelta: 0.0,
+			name:               "Regression - CI success rate drop > 10",
+			healthScoreDelta:   0.0,
 			ciSuccessRateDelta: -11.0,
-			zombieIssueDelta: 0,
-			improvedMetrics: 10,
-			degradedMetrics: 1,
-			expectRegression: true,
+			zombieIssueDelta:   0,
+			improvedMetrics:    10,
+			degradedMetrics:    1,
+			expectRegression:   true,
 		},
 		{
-			name:             "Regression - zombie issues increase > 5",
-			healthScoreDelta: 0.0,
+			name:               "Regression - zombie issues increase > 5",
+			healthScoreDelta:   0.0,
 			ciSuccessRateDelta: 0.0,
-			zombieIssueDelta: 6,
-			improvedMetrics: 10,
-			degradedMetrics: 1,
-			expectRegression: true,
+			zombieIssueDelta:   6,
+			improvedMetrics:    10,
+			degradedMetrics:    1,
+			expectRegression:   true,
 		},
 		{
-			name:             "Regression - degraded > 2x improved",
-			healthScoreDelta: 0.0,
+			name:               "Regression - degraded > 2x improved",
+			healthScoreDelta:   0.0,
 			ciSuccessRateDelta: 0.0,
-			zombieIssueDelta: 0,
-			improvedMetrics: 2,
-			degradedMetrics: 5, // 5 > 2*2
-			expectRegression: true,
+			zombieIssueDelta:   0,
+			improvedMetrics:    2,
+			degradedMetrics:    5, // 5 > 2*2
+			expectRegression:   true,
 		},
 	}
 
@@ -613,7 +613,7 @@ func TestRegressionDetectionThresholds(t *testing.T) {
 					TotalZombieIssues: 5,
 				},
 			}
-			
+
 			current := &models.Report{
 				Summary: models.GlobalSummary{
 					AvgHealthScore:    80.0 + tt.healthScoreDelta,
@@ -636,7 +636,7 @@ func TestRegressionDetectionThresholds(t *testing.T) {
 			}
 
 			summary := generateSummary(current, previous, deltas)
-			
+
 			if summary.HasRegression != tt.expectRegression {
 				t.Errorf("Expected regression=%v, got %v", tt.expectRegression, summary.HasRegression)
 			}
