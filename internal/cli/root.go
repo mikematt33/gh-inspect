@@ -223,6 +223,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "Enable verbose output")
 
 	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(compareCmd)
 	registerAnalysisFlags(runCmd)
 }
 
@@ -266,6 +267,11 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 			comparison = baseline.Compare(fullReport, previousBaseline)
 			if shouldPrintInfo() {
 				printComparison(comparison)
+			}
+
+			if flagFailOnRegression && comparison != nil && comparison.Summary.HasRegression {
+				fmt.Printf("\n❌ Failure: Regression detected compared to baseline.\n")
+				os.Exit(1)
 			}
 		}
 	}
@@ -314,7 +320,7 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 	// Exit Code Check for health score
 	if flagFail > 0 && fullReport.Summary.AvgHealthScore < float64(flagFail) {
 
-		fmt.Printf("\n❌ Failure: Regression detected compared to baseline.\n")
+		fmt.Printf("\n❌ Failure: Health score is below the --fail-under threshold.\n")
 		os.Exit(1)
 	}
 }
