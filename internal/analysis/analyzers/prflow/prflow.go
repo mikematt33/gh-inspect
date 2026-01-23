@@ -25,28 +25,30 @@ func (a *Analyzer) Name() string {
 }
 
 func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo analysis.TargetRepository, cfg analysis.Config) (models.AnalyzerResult, error) {
-	// 1. Fetch Closed PRs for Metrics
-	// Limit to ~100 for now to be safe, or use pagination
-	// Using "all" state but we can filter. For metrics we usually want closed.
+	// 1. Fetch all recent PRs in one call (both open and closed) to avoid multiple API calls
+	// We'll filter by state in memory
 	opts := &github.PullRequestListOptions{
-		State:       "closed",
+		State:       "all",
 		ListOptions: github.ListOptions{PerPage: 100},
 		Sort:        "updated",
 		Direction:   "desc",
 	}
 
-	closedPRs, err := client.GetPullRequests(ctx, repo.Owner, repo.Name, opts)
+	allPRs, err := client.GetPullRequests(ctx, repo.Owner, repo.Name, opts)
 	if err != nil {
 		return models.AnalyzerResult{Name: a.Name()}, err
 	}
 
-	// Filter by Config.Since manually since PR list API doesn't fully strict filter by UpdatedAt in the call sometimes?
-	// Actually ListPullRequests doesn't support 'Since' param directly in options, it's mostly for Issues or Commits.
-	// So we filter the response array.
+	// Filter by Config.Since and separate by state
 	var recentClosedPRs []*github.PullRequest
-	for _, pr := range closedPRs {
+	var openPRs []*github.PullRequest
+	for _, pr := range allPRs {
 		if pr.UpdatedAt != nil && pr.UpdatedAt.After(cfg.Since) {
-			recentClosedPRs = append(recentClosedPRs, pr)
+			if pr.GetState() == "closed" {
+				recentClosedPRs = append(recentClosedPRs, pr)
+			} else if pr.GetState() == "open" {
+				openPRs = append(openPRs, pr)
+			}
 		}
 	}
 
@@ -85,28 +87,17 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	var metrics []models.Metric
 	var sizeFindings []models.Finding // Local findings for size analysis
 
-	// 2. Sample Open PRs for "Time to First Review" (Expensive call)
-	// WE NEED TO BE CAREFUL HERE. 'IncludeDeep' check.
-	// If deep=false, maybe skip this or sample fewer?
-	// User requested "Medium" by default. Sampling 20 is okay.
-
-	openOpts := &github.PullRequestListOptions{
-		State: "all", // Get recent ones regardless of state for review stats?
-		// actually usually meaningful on Merged/Closed ones too.
-		ListOptions: github.ListOptions{PerPage: 20}, // Sample size
-		Sort:        "created",
-		Direction:   "desc",
-	}
-
-	samplePRs, err := client.GetPullRequests(ctx, repo.Owner, repo.Name, openOpts)
-	if err == nil {
+	// 2. Use already fetched PRs for "Time to First Review" (avoid duplicate API call)
+	// Sample from the PRs we already have instead of fetching again
+	samplePRs := allPRs
+	if len(samplePRs) > 0 {
 		// Calculate Time To First Review
-		// This requires N+1 queries. Only do it if we are allowed or count is low.
-		// If Deep is false, limit checks.
+		// This requires N+1 queries per PR. Limit aggressively to minimize API calls.
+		// Deep scan: 20 PRs, Normal scan: 5 PRs
 
 		limitChecks := 5
 		if cfg.IncludeDeep {
-			limitChecks = 50
+			limitChecks = 20
 		}
 
 		var totalReviewTime time.Duration
@@ -204,7 +195,8 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		// This fits "Opinionated Insights".
 
 		if prsWithData == 0 && len(recentClosedPRs) > 0 {
-			// Sample top 5 merged PRs
+			// Sample top 5 merged PRs for size data
+			// Only fetch individual PRs if absolutely necessary (list doesn't have size data)
 			limit := 5
 			if len(recentClosedPRs) < limit {
 				limit = len(recentClosedPRs)
@@ -287,17 +279,11 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		})
 	}
 
-	// 3. Stale PRs (Findings)
-	activeOpts := &github.PullRequestListOptions{
-		State:       "open",
-		ListOptions: github.ListOptions{PerPage: 50},
-	}
-	activePRs, _ := client.GetPullRequests(ctx, repo.Owner, repo.Name, activeOpts)
-
+	// 3. Stale PRs (Findings) - use already fetched open PRs
 	var findings []models.Finding
 	now := time.Now()
 
-	for _, pr := range activePRs {
+	for _, pr := range openPRs {
 		if pr.UpdatedAt == nil {
 			continue
 		}

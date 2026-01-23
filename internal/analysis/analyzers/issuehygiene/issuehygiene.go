@@ -30,33 +30,73 @@ func (a *Analyzer) Name() string {
 
 func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo analysis.TargetRepository, cfg analysis.Config) (models.AnalyzerResult, error) {
 	// 1. Fetch Open Issues (Oldest Updated first, to find stale/zombie)
-	// We want to verify if there are abandoned issues.
-	// We'll limit to 100 to avoid rate limits, unless Deep scan is enabled.
+	// Limit to reasonable number to avoid excessive API calls
+	// Deep scan: 200 issues, Normal scan: 100 issues
+	maxIssues := 100
+	if cfg.IncludeDeep {
+		maxIssues = 200
+	}
+
 	openOpts := &github.IssueListByRepoOptions{
 		State:       "open",
 		Sort:        "updated",
 		Direction:   "asc",
 		ListOptions: github.ListOptions{PerPage: 100},
 	}
-	// If NOT deep scan, maybe just fetch one page?
-	// The client implementation auto-paginates... which is good for full analysis but bad for quick scan.
-	// But let's assume auto-pagination is fine for now; 100 per page, limited activity on many repos.
 
-	openIssues, err := client.GetIssues(ctx, repo.Owner, repo.Name, openOpts)
-	if err != nil {
-		return models.AnalyzerResult{Name: a.Name()}, err
+	// Fetch with pagination limit
+	var openIssues []*github.Issue
+	for len(openIssues) < maxIssues {
+		pageSize := maxIssues - len(openIssues)
+		if pageSize > 100 {
+			pageSize = 100
+		}
+		openOpts.PerPage = pageSize
+
+		pageIssues, err := client.GetIssues(ctx, repo.Owner, repo.Name, openOpts)
+		if err != nil {
+			return models.AnalyzerResult{Name: a.Name()}, err
+		}
+
+		if len(pageIssues) == 0 {
+			break
+		}
+
+		openIssues = append(openIssues, pageIssues...)
+		if len(pageIssues) < pageSize {
+			break
+		}
 	}
 
 	// 2. Fetch Recently Closed Issues (for throughput/lifetime)
-	// We only care about those closed in the lookback window.
+	// Also apply same limit
 	closedOpts := &github.IssueListByRepoOptions{
 		State:       "closed",
 		Since:       cfg.Since,
 		ListOptions: github.ListOptions{PerPage: 100},
 	}
-	closedIssues, err := client.GetIssues(ctx, repo.Owner, repo.Name, closedOpts)
-	if err != nil {
-		return models.AnalyzerResult{Name: a.Name()}, err
+
+	var closedIssues []*github.Issue
+	for len(closedIssues) < maxIssues {
+		pageSize := maxIssues - len(closedIssues)
+		if pageSize > 100 {
+			pageSize = 100
+		}
+		closedOpts.PerPage = pageSize
+
+		pageIssues, err := client.GetIssues(ctx, repo.Owner, repo.Name, closedOpts)
+		if err != nil {
+			return models.AnalyzerResult{Name: a.Name()}, err
+		}
+
+		if len(pageIssues) == 0 {
+			break
+		}
+
+		closedIssues = append(closedIssues, pageIssues...)
+		if len(pageIssues) < pageSize {
+			break
+		}
 	}
 
 	// 3. Calculate Metrics

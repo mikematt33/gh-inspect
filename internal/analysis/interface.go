@@ -52,4 +52,7 @@ type Client interface {
 
 	// GetUnderlyingClient exposes the raw GitHub client for advanced operations not yet abstracted
 	GetUnderlyingClient() *github.Client
+
+	// GetTree gets a git tree for efficient multi-file checking
+	GetTree(ctx context.Context, owner, repo, sha string, recursive bool) (*github.Tree, error)
 }

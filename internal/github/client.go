@@ -136,6 +136,7 @@ func (c *ClientWrapper) GetUnderlyingClient() *github.Client {
 }
 
 // GetPullRequests implements analysis.Client.
+// Returns a single page of pull requests - callers should handle pagination if needed
 func (c *ClientWrapper) GetPullRequests(ctx context.Context, owner, repo string, opts *github.PullRequestListOptions) ([]*github.PullRequest, error) {
 	prs, resp, err := c.client.PullRequests.List(ctx, owner, repo, opts)
 	if resp != nil {
@@ -225,19 +226,18 @@ func (c *ClientWrapper) GetPullRequest(ctx context.Context, owner, repo string, 
 }
 
 // GetIssues implements analysis.Client.
+// Auto-paginates up to a reasonable limit to avoid excessive API calls
 func (c *ClientWrapper) GetIssues(ctx context.Context, owner, repo string, opts *github.IssueListByRepoOptions) ([]*github.Issue, error) {
 	var allIssues []*github.Issue
-	// Iterate pages if necessary? The caller passes opts with perPage.
-	// We should probably handle pagination here if we want "Get All matching options".
-	// But usually opts contains the pagination state.
-	// To be safe and consistent with ListCommitsSince, let's auto-paginate ONLY IF caller didn't specify page?
-	// Actually, simplicity: Just return one page? Or auto-paginate?
-	// GetPullRequests returns "List", ListCommitsSince auto-paginates.
-	// Let's auto-paginate here.
 
 	if opts.PerPage == 0 {
 		opts.PerPage = 100
 	}
+
+	// Prevent unbounded pagination - caller should handle limits
+	// This method will paginate automatically but not infinitely
+	maxPages := 5 // Maximum 5 pages (500 issues with perPage=100)
+	pageCount := 0
 
 	for {
 		issues, resp, err := c.client.Issues.ListByRepo(ctx, owner, repo, opts)
@@ -254,7 +254,8 @@ func (c *ClientWrapper) GetIssues(ctx context.Context, owner, repo string, opts 
 			}
 		}
 
-		if resp.NextPage == 0 {
+		pageCount++
+		if resp == nil || resp.NextPage == 0 || pageCount >= maxPages {
 			break
 		}
 		opts.Page = resp.NextPage
@@ -263,12 +264,16 @@ func (c *ClientWrapper) GetIssues(ctx context.Context, owner, repo string, opts 
 }
 
 func (c *ClientWrapper) GetIssueComments(ctx context.Context, owner, repo string, number int, opts *github.IssueListCommentsOptions) ([]*github.IssueComment, error) {
+	// Auto-paginate comments but with a reasonable limit
 	var all []*github.IssueComment
 	if opts == nil {
 		opts = &github.IssueListCommentsOptions{ListOptions: github.ListOptions{PerPage: 100}}
 	} else if opts.PerPage == 0 {
 		opts.PerPage = 100
 	}
+
+	maxPages := 3 // Limit to 300 comments per issue
+	pageCount := 0
 
 	for {
 		comments, resp, err := c.client.Issues.ListComments(ctx, owner, repo, number, opts)
@@ -277,7 +282,9 @@ func (c *ClientWrapper) GetIssueComments(ctx context.Context, owner, repo string
 		}
 		c.checkRateLimit(resp)
 		all = append(all, comments...)
-		if resp.NextPage == 0 {
+
+		pageCount++
+		if resp.NextPage == 0 || pageCount >= maxPages {
 			break
 		}
 		opts.Page = resp.NextPage
@@ -352,3 +359,16 @@ func (c *ClientWrapper) ListRepositories(ctx context.Context, org string, opts *
 
 	return allRepos, nil
 }
+
+// GetTree gets a git tree (efficient for checking multiple files)
+func (c *ClientWrapper) GetTree(ctx context.Context, owner, repo, sha string, recursive bool) (*github.Tree, error) {
+	tree, _, err := c.client.Git.GetTree(ctx, owner, repo, sha, recursive)
+	return tree, err
+}
+
+// Note: Future optimization opportunity - Implement GraphQL queries for batching
+// GraphQL could combine multiple REST calls into single queries, e.g.:
+// - Fetch repo metadata + branch protection + CI status in one query
+// - Batch PR queries with review data included
+// - Get multiple file contents or tree in one query
+// This would significantly reduce API calls for analyzers that need related data
