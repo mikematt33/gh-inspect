@@ -73,6 +73,9 @@ func (m *MockClient) ListRepositories(ctx context.Context, org string, opts *git
 func (m *MockClient) GetUnderlyingClient() *github.Client {
 	return nil
 }
+func (m *MockClient) GetTree(ctx context.Context, owner, repo, sha string, recursive bool) (*github.Tree, error) {
+	return nil, nil
+}
 
 func TestAnalyzer_Analyze(t *testing.T) {
 	now := time.Now()

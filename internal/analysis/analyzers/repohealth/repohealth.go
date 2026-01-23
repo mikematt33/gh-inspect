@@ -33,41 +33,67 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	var metrics []models.Metric
 	healthScore := 100
 
-	// 2. Check Key Files
+	// 2. Check Key Files efficiently using git tree API (1 API call instead of 6+)
 	keyFiles := []struct {
 		Path     string
+		AltPaths []string // Alternative locations
 		Severity models.Severity
 		ScoreDed int
 		Found    bool
 	}{
-		{"LICENSE", models.SeverityHigh, 30, false},
-		{"README.md", models.SeverityMedium, 10, false},
-		{"CONTRIBUTING.md", models.SeverityLow, 5, false},
-		{"SECURITY.md", models.SeverityMedium, 15, false},
-		{"CODE_OF_CONDUCT.md", models.SeverityLow, 5, false},
-		{".github/CODEOWNERS", models.SeverityLow, 5, false},
+		{"LICENSE", nil, models.SeverityHigh, 30, false},
+		{"README.md", nil, models.SeverityMedium, 10, false},
+		{"CONTRIBUTING.md", nil, models.SeverityLow, 5, false},
+		{"SECURITY.md", []string{".github/SECURITY.md"}, models.SeverityMedium, 15, false},
+		{"CODE_OF_CONDUCT.md", []string{".github/CODE_OF_CONDUCT.md"}, models.SeverityLow, 5, false},
+		{".github/CODEOWNERS", nil, models.SeverityLow, 5, false},
 	}
 
-	for i := range keyFiles {
-		f := &keyFiles[i]
-		// Try root
-		_, _, err := client.GetContent(ctx, repo.Owner, repo.Name, f.Path)
-		if err == nil {
-			f.Found = true
-			continue
-		}
-
-		// Common alternative locations
-		if f.Path == "SECURITY.md" {
-			_, _, err := client.GetContent(ctx, repo.Owner, repo.Name, ".github/SECURITY.md")
-			if err == nil {
-				f.Found = true
+	// Use git tree API to check all files at once (much more efficient)
+	tree, err := client.GetTree(ctx, repo.Owner, repo.Name, defaultBranch, true)
+	if err == nil && tree != nil {
+		// Build a set of all paths in the tree
+		pathSet := make(map[string]bool)
+		for _, entry := range tree.Entries {
+			if entry.Path != nil {
+				pathSet[*entry.Path] = true
 			}
 		}
-		if f.Path == "CODE_OF_CONDUCT.md" {
-			_, _, err := client.GetContent(ctx, repo.Owner, repo.Name, ".github/CODE_OF_CONDUCT.md")
+
+		// Check which key files exist
+		for i := range keyFiles {
+			f := &keyFiles[i]
+			// Check primary path
+			if pathSet[f.Path] {
+				f.Found = true
+				continue
+			}
+			// Check alternative paths
+			for _, altPath := range f.AltPaths {
+				if pathSet[altPath] {
+					f.Found = true
+					break
+				}
+			}
+		}
+	} else {
+		// Fallback to individual checks if tree API fails (e.g., empty repo)
+		for i := range keyFiles {
+			f := &keyFiles[i]
+			// Try root
+			_, _, err := client.GetContent(ctx, repo.Owner, repo.Name, f.Path)
 			if err == nil {
 				f.Found = true
+				continue
+			}
+
+			// Try alternative paths
+			for _, altPath := range f.AltPaths {
+				_, _, err := client.GetContent(ctx, repo.Owner, repo.Name, altPath)
+				if err == nil {
+					f.Found = true
+					break
+				}
 			}
 		}
 	}
@@ -177,13 +203,29 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		})
 	}
 
-	// 5. Check dependency files
+	// 5. Check dependency files (reuse tree from earlier if available)
 	depFiles := []string{"package.json", "requirements.txt", "pom.xml", "build.gradle", "go.mod", "Cargo.toml", "Gemfile"}
 	depFound := false
-	for _, df := range depFiles {
-		if _, _, err := client.GetContent(ctx, repo.Owner, repo.Name, df); err == nil {
-			depFound = true
-			break
+	if tree != nil {
+		// Reuse the tree we already fetched
+		for _, df := range depFiles {
+			for _, entry := range tree.Entries {
+				if entry.Path != nil && *entry.Path == df {
+					depFound = true
+					break
+				}
+			}
+			if depFound {
+				break
+			}
+		}
+	} else {
+		// Fallback to individual checks
+		for _, df := range depFiles {
+			if _, _, err := client.GetContent(ctx, repo.Owner, repo.Name, df); err == nil {
+				depFound = true
+				break
+			}
 		}
 	}
 	metrics = append(metrics, models.Metric{

@@ -46,28 +46,17 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	staleBranches := 0
 	now := time.Now()
 
-	// Check each branch for staleness (limit to first 50 to avoid rate limits)
-	// Note: This only samples up to the first 50 branches. Repositories with more branches
-	// may have additional stale branches not detected by this analyzer.
-	limit := 50
-	if len(branches) < limit {
-		limit = len(branches)
-	}
-
-	for i := 0; i < limit; i++ {
-		branch := branches[i]
+	// Check each branch for staleness
+	// ListBranches already includes commit info, no need for individual GetBranch calls
+	// Note: This samples up to the first 100 branches fetched above.
+	for _, branch := range branches {
 		if branch.GetName() == defaultBranch {
 			continue
 		}
 
-		// Get branch details to check last commit date
-		branchDetail, _, err := client.GetUnderlyingClient().Repositories.GetBranch(ctx, repo.Owner, repo.Name, branch.GetName(), 0)
-		if err != nil {
-			continue
-		}
-
-		if branchDetail.Commit != nil && branchDetail.Commit.Commit != nil && branchDetail.Commit.Commit.Author != nil {
-			lastCommitDate := branchDetail.Commit.Commit.Author.GetDate()
+		// Branch list includes commit info - use it directly instead of separate API call
+		if branch.Commit != nil && branch.Commit.Commit != nil && branch.Commit.Commit.Author != nil {
+			lastCommitDate := branch.Commit.Commit.Author.GetDate()
 			daysSinceUpdate := now.Sub(lastCommitDate.Time).Hours() / 24
 
 			if int(daysSinceUpdate) > a.StaleThresholdDays {
@@ -86,7 +75,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		Key:          "stale_branches",
 		Value:        float64(staleBranches),
 		DisplayValue: fmt.Sprintf("%d", staleBranches),
-		Description:  fmt.Sprintf("Branches inactive > %d days (sampled from first %d branches)", a.StaleThresholdDays, limit),
+		Description:  fmt.Sprintf("Branches inactive > %d days", a.StaleThresholdDays),
 	})
 
 	// Findings
