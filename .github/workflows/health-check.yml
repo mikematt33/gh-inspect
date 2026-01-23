@@ -31,12 +31,17 @@ jobs:
           # Use shallow scan for PRs, standard for scheduled runs
           DEPTH="${{ github.event_name == 'pull_request' && 'shallow' || 'standard' }}"
 
+          # Build comparison flags only if baseline exists
+          BASELINE_FLAGS=""
+          if [ -f ~/.gh-inspect/baseline.json ]; then
+            BASELINE_FLAGS="--compare-last --fail-on-regression"
+          fi
+
           gh-inspect run ${{ github.repository }} \
             --format=markdown \
             --explain \
             --depth=$DEPTH \
-            --compare-last \
-            --fail-on-regression \
+            $BASELINE_FLAGS \
             --fail-under=70 \
             --save-baseline \
             > analysis-report.md
