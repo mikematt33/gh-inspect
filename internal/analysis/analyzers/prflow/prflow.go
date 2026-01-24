@@ -27,9 +27,15 @@ func (a *Analyzer) Name() string {
 func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo analysis.TargetRepository, cfg analysis.Config) (models.AnalyzerResult, error) {
 	// 1. Fetch all recent PRs in one call (both open and closed) to avoid multiple API calls
 	// We'll filter by state in memory
+	// Respect MaxPRs from depth config
+	perPage := 100
+	if cfg.DepthConfig.MaxPRs > 0 && cfg.DepthConfig.MaxPRs < 100 {
+		perPage = cfg.DepthConfig.MaxPRs
+	}
+
 	opts := &github.PullRequestListOptions{
 		State:       "all",
-		ListOptions: github.ListOptions{PerPage: 100},
+		ListOptions: github.ListOptions{PerPage: perPage},
 		Sort:        "updated",
 		Direction:   "desc",
 	}
@@ -37,6 +43,11 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	allPRs, err := client.GetPullRequests(ctx, repo.Owner, repo.Name, opts)
 	if err != nil {
 		return models.AnalyzerResult{Name: a.Name()}, err
+	}
+
+	// Apply MaxPRs limit if configured
+	if cfg.DepthConfig.MaxPRs > 0 && len(allPRs) > cfg.DepthConfig.MaxPRs {
+		allPRs = allPRs[:cfg.DepthConfig.MaxPRs]
 	}
 
 	// Filter by Config.Since and separate by state
@@ -217,6 +228,11 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 							Message:     fmt.Sprintf("Large PR detected: #%d has %d changes. Large PRs slow down review.", prNum, total),
 							Actionable:  true,
 							Remediation: "Split PR into smaller chunks.",
+							Explanation: "Large PRs are harder to review thoroughly, leading to missed bugs and slower iteration cycles.",
+							SuggestedActions: []string{
+								"Break this PR into logical, independent smaller PRs",
+								"Use feature flags to merge incomplete features incrementally",
+							},
 						})
 					}
 
@@ -297,6 +313,11 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 				Location:    pr.GetHTMLURL(),
 				Actionable:  true,
 				Remediation: "Ping the reviewer or close the PR.",
+				Explanation: "Stale PRs block progress and create merge conflicts. They indicate bottlenecks in the review process.",
+				SuggestedActions: []string{
+					"Request reviews from specific team members with @mentions",
+					"Break large PRs into smaller, reviewable chunks",
+				},
 			})
 		}
 	}

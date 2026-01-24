@@ -38,18 +38,30 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 
 	// Now fetch runs within the time window for analysis
 	sinceStr := fmt.Sprintf(">=%s", cfg.Since.Format("2006-01-02"))
+
+	perPage := 100
+	if cfg.DepthConfig.MaxWorkflowRuns > 0 && cfg.DepthConfig.MaxWorkflowRuns < 100 {
+		perPage = cfg.DepthConfig.MaxWorkflowRuns
+	}
+
 	opts := &github.ListWorkflowRunsOptions{
 		Created: sinceStr,
 		ListOptions: github.ListOptions{
-			PerPage: 100,
+			PerPage: perPage,
 		},
 	}
 
 	// We might need to page to get all runs in window
 	// Users can have many CI runs, so we'll fetch up to a reasonable limit
+	// Use MaxWorkflowRuns from depth config
 	var allRuns []*github.WorkflowRun
 	var totalCount int // Actual total from API
-	maxRuns := 5000    // Increased limit to capture more data
+	maxRuns := cfg.DepthConfig.MaxWorkflowRuns
+	if maxRuns == 0 {
+		// Fallback to old behavior if not configured
+		maxRuns = 5000
+	}
+
 	for {
 		runs, resp, err := client.GetWorkflowRuns(ctx, repo.Owner, repo.Name, opts)
 		if err != nil {
@@ -200,9 +212,14 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	// 1. High Failure Rate Detection
 	if totalRuns > 10 && successRate < 0.80 {
 		result.Findings = append(result.Findings, models.Finding{
-			Type:     "ci_stability",
-			Severity: models.SeverityHigh,
-			Message:  fmt.Sprintf("Global success rate is low (%.0f%%). CI may be unstable.", successRate*100),
+			Type:        "ci_stability",
+			Severity:    models.SeverityHigh,
+			Message:     fmt.Sprintf("Global success rate is low (%.0f%%). CI may be unstable.", successRate*100),
+			Explanation: "Low CI success rates indicate flaky tests, environmental issues, or unreliable builds that waste developer time.",
+			SuggestedActions: []string{
+				"Identify and fix the most frequently failing tests",
+				"Add retry logic for flaky network-dependent tests",
+			},
 		})
 	}
 
@@ -226,9 +243,14 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	// 3. Slow Builds
 	if avgDurationSeconds > 900 { // 15 mins
 		result.Findings = append(result.Findings, models.Finding{
-			Type:     "slow_builds",
-			Severity: models.SeverityMedium,
-			Message:  fmt.Sprintf("Average build time is high (%s). Consider optimization.", (time.Duration(avgDurationSeconds) * time.Second).String()),
+			Type:        "slow_builds",
+			Severity:    models.SeverityMedium,
+			Message:     fmt.Sprintf("Average build time is high (%s). Consider optimization.", (time.Duration(avgDurationSeconds) * time.Second).String()),
+			Explanation: "Slow CI builds reduce developer productivity and increase feedback time, leading to context switching.",
+			SuggestedActions: []string{
+				"Cache dependencies between runs to speed up builds",
+				"Parallelize test suites or split into multiple jobs",
+			},
 		})
 	}
 

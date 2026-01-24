@@ -172,6 +172,11 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 			Message:     "Single contributor risk: 50% of commits are by 1 person",
 			Actionable:  true,
 			Remediation: "Encourage code rotation and pair programming.",
+			Explanation: "A bus factor of 1 means that if your primary contributor is unavailable, development could stall. This creates single points of failure for your project.",
+			SuggestedActions: []string{
+				"Set up pair programming sessions for knowledge transfer",
+				"Rotate code review responsibilities across team members",
+			},
 		})
 	}
 

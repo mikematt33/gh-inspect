@@ -35,7 +35,12 @@
               "message": "PR #102 has been inactive for 21 days",
               "location": "https://github.com/mikematt33/gh-inspect/pull/102",
               "actionable": true,
-              "remediation": "Close or Ping assignee"
+              "remediation": "Close or Ping assignee",
+              "explanation": "Stale PRs block progress and create merge conflicts. They indicate bottlenecks in the review process.",
+              "suggested_actions": [
+                "Request reviews from specific team members with @mentions",
+                "Break large PRs into smaller, reviewable chunks"
+              ]
             }
           ]
         }

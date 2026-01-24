@@ -101,12 +101,32 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	for _, f := range keyFiles {
 		if !f.Found {
 			healthScore -= f.ScoreDed
+			var suggestions []string
+			switch f.Path {
+			case "README.md":
+				suggestions = []string{
+					"Create a README with project overview, setup instructions, and contribution guidelines",
+					"Include badges for build status, coverage, and dependencies",
+				}
+			case "LICENSE":
+				suggestions = []string{
+					"Choose an appropriate open source license from choosealicense.com",
+					"Add license file to clarify usage rights and protect contributors",
+				}
+			default:
+				suggestions = []string{
+					fmt.Sprintf("Add %s using a standard template", f.Path),
+					"Review GitHub's recommended community health files",
+				}
+			}
 			findings = append(findings, models.Finding{
-				Type:        "missing_file",
-				Severity:    f.Severity,
-				Message:     fmt.Sprintf("Missing key file: %s", f.Path),
-				Actionable:  true,
-				Remediation: fmt.Sprintf("Add a %s file to the repository root.", f.Path),
+				Type:             "missing_file",
+				Severity:         f.Severity,
+				Message:          fmt.Sprintf("Missing key file: %s", f.Path),
+				Actionable:       true,
+				Remediation:      fmt.Sprintf("Add a %s file to the repository root.", f.Path),
+				Explanation:      "Missing documentation and community files reduce project discoverability and contributor engagement.",
+				SuggestedActions: suggestions,
 			})
 		}
 	}
@@ -132,6 +152,11 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 				Message:     fmt.Sprintf("CI is failing on default branch (%s)", defaultBranch),
 				Actionable:  true,
 				Remediation: "Fix the build break immediately.",
+				Explanation: "Broken builds on the main branch prevent deployments and block other developers from merging their work.",
+				SuggestedActions: []string{
+					"Review the latest CI run logs to identify the failure",
+					"Create a hotfix branch to resolve the issue quickly",
+				},
 			})
 		} else if state == "pending" {
 			// Could be stuck or just running.
@@ -200,6 +225,11 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 			Message:     fmt.Sprintf("No branch protection on %s", defaultBranch),
 			Actionable:  true,
 			Remediation: "Enable branch protection rules.",
+			Explanation: "Without branch protection, anyone with write access can push directly to main, bypassing reviews and tests.",
+			SuggestedActions: []string{
+				"Enable 'Require pull request reviews before merging' in branch settings",
+				"Enable 'Require status checks to pass before merging' to enforce CI",
+			},
 		})
 	}
 
