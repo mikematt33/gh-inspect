@@ -73,7 +73,7 @@ func NewClientWithCache(token string, useCache bool) *ClientWrapper {
 	if useCache {
 		cachePath, err := cache.GetDefaultCachePath()
 		if err == nil {
-			c, err := cache.New(cachePath, 24*time.Hour)
+			c, err := cache.New(cachePath, time.Hour)
 			if err == nil {
 				wrapper.diskCache = c
 			}

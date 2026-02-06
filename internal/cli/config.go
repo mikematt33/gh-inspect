@@ -59,6 +59,7 @@ func init() {
 		return []string{
 			"global.concurrency",
 			"global.github_token",
+			"global.output_mode",
 			"analyzers.pr_flow.enabled",
 			"analyzers.pr_flow.params.stale_threshold_days",
 			"analyzers.pr_flow.params.cycle_time_target_hours",

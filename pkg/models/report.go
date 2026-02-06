@@ -4,6 +4,18 @@ import (
 	"time"
 )
 
+// OutputMode defines how findings and insights are presented
+type OutputMode string
+
+const (
+	// OutputModeSuggestive includes actionable recommendations and improvement tips
+	OutputModeSuggestive OutputMode = "suggestive"
+	// OutputModeObservational uses neutral, observational language without prescriptive advice (default)
+	OutputModeObservational OutputMode = "observational"
+	// OutputModeStatistical shows only raw metrics and numbers without any interpretation
+	OutputModeStatistical OutputMode = "statistical"
+)
+
 // Report is the top-level canonical output structure.
 // It aggregates analysis results from one or more repositories.
 type Report struct {
@@ -51,9 +63,10 @@ type Finding struct {
 	Message          string   `json:"message"`
 	Location         string   `json:"location,omitempty"` // URL or file path
 	Actionable       bool     `json:"actionable"`
-	Remediation      string   `json:"remediation,omitempty"`       // Advice on how to fix
-	Explanation      string   `json:"explanation,omitempty"`       // Why this matters
-	SuggestedActions []string `json:"suggested_actions,omitempty"` // 1-2 concrete next steps
+	Remediation      string   `json:"remediation,omitempty"`       // Advice on how to fix (suggestive mode)
+	Explanation      string   `json:"explanation,omitempty"`       // Why this matters (suggestive/observational modes)
+	SuggestedActions []string `json:"suggested_actions,omitempty"` // 1-2 concrete next steps (suggestive mode)
+	Observation      string   `json:"observation,omitempty"`       // Neutral observation (observational mode)
 }
 
 type Severity string

@@ -10,9 +10,10 @@ import (
 
 // Config defines the scope of analysis
 type Config struct {
-	Since       time.Time   // Lookback window (e.g., 30 days)
-	IncludeDeep bool        // If true, perform costlier scans
-	DepthConfig DepthConfig // Depth configuration with limits
+	Since       time.Time         // Lookback window (e.g., 30 days)
+	IncludeDeep bool              // If true, perform costlier scans
+	DepthConfig DepthConfig       // Depth configuration with limits
+	OutputMode  models.OutputMode // How to present findings (suggestive, observational, statistical)
 }
 
 // Analyzer is the core interface that all inspection logic must implement.

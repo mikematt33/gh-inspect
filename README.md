@@ -9,12 +9,17 @@
 ## 🚀 Key Features
 
 - **Engineering Health Score**: Aggregates hundreds of data points into a single 0-100 score.
+- **Flexible Output Modes**: Choose between suggestive (prescriptive advice), observational (neutral facts), or statistical (numbers only) presentation.
 - **Baseline & Regression Detection**: Track score changes over time and detect regressions automatically.
 - **Score Explanation**: Detailed breakdown showing why your score changed with improvement tips.
 - **Bus Factor Analysis**: Identifies if your project relies too heavily on single contributors.
+- **Code Quality Metrics**: Tracks code churn, review coverage, and review depth.
+- **Collaboration Metrics**: Measures reviewer engagement, cross-team collaboration, and discussion depth.
 - **PR Velocity**: Measures Cycle Time, Reviews per PR, and identifies "Giant PRs" that slow down development.
 - **Zombie Detection**: Finds stale issues and PRs that are clogging up your backlog.
 - **CI Insights**: Tracks workflow success rates, expensive runs, and stability.
+- **Deployment Metrics**: Analyzes release consistency, frequency, and rapid release patterns.
+- **Dependency Analysis**: Multi-language dependency detection and management insights.
 - **Smart Depth Control**: Choose between shallow, standard, or deep analysis with fine-grained API usage control.
 - **Recommendations Engine**: Get actionable suggestions with explanations for every finding.
 - **GitHub Actions Integration**: Markdown output optimized for PR comments and Actions summaries.
@@ -136,137 +141,6 @@ The `auth logout` command intelligently:
 - Removes tokens from config file and shell rc files automatically
 - Provides instructions for manual removal of environment variables and gh CLI tokens
 
-#### `run` - Analyze Repositories
-
-Analyze one or more repositories (format: owner/repo).
-
-```bash
-gh-inspect run owner/repo [flags]
-```
-
-**Flags:**
-
-- `--depth string`: Analysis depth: shallow, standard, or deep (default "standard").
-- `--max-prs int`: Maximum PRs to analyze (0 = use depth default).
-- `--max-issues int`: Maximum issues to fetch (0 = use depth default).
-- `--max-workflow-runs int`: Maximum CI runs to analyze (0 = use depth default).
-- `-f, --format string`: Output format (text, json, markdown) (default "text").
-- `-s, --since string`: Lookback window (e.g. 30d, 24h) (default "30d").
-- `--explain`: Show detailed score breakdown and improvement tips.
-- `--baseline string`: Path to baseline file to compare against.
-- `--save-baseline`: Save this run as the new baseline.
-- `--compare-last`: Compare with last saved baseline.
-- `--fail-on-regression`: Exit with error if regression detected.
-- `--fail-under int`: Exit with error code 1 if average health score is below this value.
-- `--no-cache`: Disable API response caching (forces fresh API calls).
-- `--include strings`: Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
-- `--exclude strings`: Exclude specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
-- `--list-analyzers`: List all available analyzers with descriptions and exit.
-
-**Global Flags:**
-
-- `-q, --quiet`: Suppress non-essential output (useful for CI/CD).
-- `-v, --verbose`: Enable verbose output with detailed progress information.
-
-**Progress Indicator:**
-
-During analysis, a clean progress bar shows:
-
-- Current progress: `Analyzing repositories (5/10)`
-- Automatically clears when complete for clean output
-- Can be suppressed with `--quiet` flag for CI/CD pipelines
-
-#### `org` - Organization Scan
-
-Scan all active repositories in a GitHub organization. Automatically skips archived repositories.
-
-```bash
-gh-inspect org organization [flags]
-```
-
-**Features:**
-
-- Analyzes all non-archived repositories in the organization
-- Provides aggregated organization-level summary including:
-  - Total repositories analyzed
-  - Average health score across all repos
-  - Average PR cycle time
-  - Average CI success rate
-  - **Average CI runtime** 🆕 - Mean build time across all repos
-  - Total commits, issues, and findings
-  - Repos at risk (health score < 50)
-  - Repos with bus factor of 1
-
-**Flags:**
-
-- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
-- **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
-
-**Filtering Examples:**
-
-```bash
-# Only analyze Go and Python repositories
-gh-inspect org my-org --filter-language=go,python
-
-# Filter by name pattern (regex)
-gh-inspect org my-org --filter-name="^api-.*"
-
-# Only production repositories updated in last 90 days
-gh-inspect org my-org --filter-topics=production --filter-updated=90d
-
-# Skip forked repositories
-gh-inspect org my-org --filter-skip-forks
-```
-
-#### `user` - User Scan
-
-Analyze all repositories belonging to a specific user.
-
-```bash
-gh-inspect user username [flags]
-```
-
-**Features:**
-
-- Analyzes all repositories owned by the user
-- Gracefully handles empty repositories (shows info message instead of error)
-- Provides same aggregated summary as organization scans
-
-**Flags:**
-
-- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
-- **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
-
-#### `compare` - Compare Repositories
-
-Compare metrics of multiple repositories side-by-side. Useful for benchmarking.
-
-```bash
-gh-inspect compare owner/repo1 owner/repo2 [flags]
-```
-
-**Flags:**
-
-- `--depth string`: Analysis depth.
-- `--max-prs int`, `--max-issues int`, `--max-workflow-runs int`: Resource limits.
-- `-f, --format string`: Output format (text, json, markdown).
-- `-s, --since string`: Lookback window.
-- `--explain`: Show score breakdown.
-- `--baseline string`, `--save-baseline`, `--compare-last`, `--fail-on-regression`: Baseline comparison.
-- `--list-analyzers`: List available analyzers.
-
-#### `update`
-
-Update `gh-inspect` to the latest version.
-
-```bash
-# Update to the latest version
-gh-inspect update
-
-# Check for updates without installing
-gh-inspect update --check
-```
-
 #### `cache` - Manage API Cache
 
 Manage the disk-based cache for GitHub API responses. The cache reduces API rate limit usage and speeds up repeated analyses.
@@ -285,7 +159,7 @@ gh-inspect cache clear --stats
 **Cache Details:**
 
 - **Location:** `~/.gh-inspect/cache`
-- **TTL:** 24 hours (automatically expires)
+- **TTL:** 1 hour (automatically expires)
 - **Scope:** Repository metadata and static data
 - **Benefits:** Reduces API calls by 30-50% on repeated runs
 
@@ -297,13 +171,23 @@ Use `--no-cache` flag to bypass cache and force fresh API calls:
 gh-inspect run owner/repo --no-cache
 ```
 
-#### `uninstall`
+#### `compare` - Compare Repositories
 
-Uninstall the CLI from your system.
+Compare metrics of multiple repositories side-by-side. Useful for benchmarking.
 
 ```bash
-gh-inspect uninstall
+gh-inspect compare owner/repo1 owner/repo2 [flags]
 ```
+
+**Flags:**
+
+- `--depth string`: Analysis depth.
+- `--max-prs int`, `--max-issues int`, `--max-workflow-runs int`: Resource limits.
+- `-f, --format string`: Output format (text, json, markdown).
+- `-s, --since string`: Lookback window.
+- `--explain`: Show score breakdown.
+- `--baseline string`, `--save-baseline`, `--compare-last`, `--fail-on-regression`: Baseline comparison.
+- `--list-analyzers`: List available analyzers.
 
 #### `completion`
 
@@ -362,6 +246,128 @@ gh-inspect completion --auto
 #### `init` & `config`
 
 Initialize or manage configuration. See [Configuration](#-configuration) for details.
+
+#### `org` - Organization Scan
+
+Scan all active repositories in a GitHub organization. Automatically skips archived repositories.
+
+```bash
+gh-inspect org organization [flags]
+```
+
+**Features:**
+
+- Analyzes all non-archived repositories in the organization
+- Provides aggregated organization-level summary including:
+  - Total repositories analyzed
+  - Average health score across all repos
+  - Average PR cycle time
+  - Average CI success rate
+  - **Average CI runtime** 🆕 - Mean build time across all repos
+  - Total commits, issues, and findings
+  - Repos at risk (health score < 50)
+  - Repos with bus factor of 1
+
+**Flags:**
+
+- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
+- **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
+
+**Filtering Examples:**
+
+```bash
+# Only analyze Go and Python repositories
+gh-inspect org my-org --filter-language=go,python
+
+# Filter by name pattern (regex)
+gh-inspect org my-org --filter-name="^api-.*"
+
+# Only production repositories updated in last 90 days
+gh-inspect org my-org --filter-topics=production --filter-updated=90d
+
+# Skip forked repositories
+gh-inspect org my-org --filter-skip-forks
+```
+
+#### `run` - Analyze Repositories
+
+Analyze one or more repositories (format: owner/repo).
+
+```bash
+gh-inspect run owner/repo [flags]
+```
+
+**Flags:**
+
+- `--depth string`: Analysis depth: shallow, standard, or deep (default "standard").
+- `--max-prs int`: Maximum PRs to analyze (0 = use depth default).
+- `--max-issues int`: Maximum issues to fetch (0 = use depth default).
+- `--max-workflow-runs int`: Maximum CI runs to analyze (0 = use depth default).
+- `-f, --format string`: Output format (text, json, markdown) (default "text").
+- `-s, --since string`: Lookback window (e.g. 30d, 24h) (default "30d").
+- `--explain`: Show detailed score breakdown and improvement tips.
+- `--output-mode string`: Control how findings are presented: suggestive, observational, or statistical (default "observational").
+- `--baseline string`: Path to baseline file to compare against.
+- `--save-baseline`: Save this run as the new baseline.
+- `--compare-last`: Compare with last saved baseline.
+- `--fail-on-regression`: Exit with error if regression detected.
+- `--fail-under int`: Exit with error code 1 if average health score is below this value.
+- `--no-cache`: Disable API response caching (forces fresh API calls).
+- `--include strings`: Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health,dependencies).
+- `--exclude strings`: Exclude specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health,dependencies).
+- `--list-analyzers`: List all available analyzers with descriptions and exit.
+
+**Global Flags:**
+
+- `-q, --quiet`: Suppress non-essential output (useful for CI/CD).
+- `-v, --verbose`: Enable verbose output with detailed progress information.
+
+**Progress Indicator:**
+
+During analysis, a clean progress bar shows:
+
+- Current progress: `Analyzing repositories (5/10)`
+- Automatically clears when complete for clean output
+- Can be suppressed with `--quiet` flag for CI/CD pipelines
+
+#### `uninstall`
+
+Uninstall the CLI from your system.
+
+```bash
+gh-inspect uninstall
+```
+
+#### `update`
+
+Update `gh-inspect` to the latest version.
+
+```bash
+# Update to the latest version
+gh-inspect update
+
+# Check for updates without installing
+gh-inspect update --check
+```
+
+#### `user` - User Scan
+
+Analyze all repositories belonging to a specific user.
+
+```bash
+gh-inspect user username [flags]
+```
+
+**Features:**
+
+- Analyzes all repositories owned by the user
+- Gracefully handles empty repositories (shows info message instead of error)
+- Provides same aggregated summary as organization scans
+
+**Flags:**
+
+- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
+- **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
 
 ### Examples
 
@@ -438,6 +444,23 @@ Useful for piping into other tools like `jq`.
 gh-inspect run owner/repo --format=json > report.json
 ```
 
+**Output Modes**
+Control how findings are presented to match your workflow:
+
+```bash
+# Observational (default) - Neutral facts and metrics
+gh-inspect run owner/repo
+
+# Suggestive - Prescriptive advice and recommendations
+gh-inspect run owner/repo --output-mode=suggestive
+
+# Statistical - Numbers only, minimal text
+gh-inspect run owner/repo --output-mode=statistical
+
+# Save output mode preference to config
+gh-inspect config set global.output_mode suggestive
+```
+
 **Quality Gate**
 Fail the command (exit code 1) if the health score is below 80. Perfect for CI pipelines.
 
@@ -480,13 +503,13 @@ gh-inspect run owner/repo --exclude=releases,branches
 ```
 
 **Use Caching for Faster Repeated Runs**
-The cache automatically stores API responses for 24 hours.
+The cache automatically stores API responses for 1 hour.
 
 ```bash
 # First run (fetches from API)
 gh-inspect run owner/repo
 
-# Second run within 24 hours (uses cache - much faster!)
+# Second run within 1 hour (uses cache - much faster!)
 gh-inspect run owner/repo
 
 # Force fresh data (bypass cache)
@@ -521,13 +544,14 @@ gh-inspect user john --filter-language=typescript --filter-topics=web --filter-u
 
 **Available Analyzers:**
 
-- `activity` - Commit patterns, contributors, bus factor
-- `prflow` - Pull request velocity and cycle time
+- `activity` - Commit patterns, contributors, bus factor, and code quality metrics
+- `prflow` - Pull request velocity, cycle time, review, and collaboration metrics
 - `ci` - CI/CD workflow success rates
 - `issues` - Issue hygiene and zombie detection
 - `security` - Security advisories and vulnerabilities
-- `releases` - Release frequency and patterns
+- `releases` - Release frequency, deployment metrics, and versioning patterns
 - `branches` - Branch protection and stale branches
+- `dependencies` - Dependency management and package analysis
 - `health` - Repository health files (README, LICENSE, etc.)
 
 **Verbose Mode**
@@ -674,35 +698,78 @@ gh-inspect config set global.concurrency 10
 
 All analyzers can be enabled/disabled and configured:
 
-- **activity** - Always enabled (core metrics)
-- **pr_flow** - Enabled by default, configurable stale threshold
+- **activity** - Always enabled (core metrics including code quality)
+- **pr_flow** - Enabled by default, configurable stale threshold (includes collaboration metrics)
 - **issue_hygiene** - Enabled by default, configurable stale/zombie thresholds
 - **repo_health** - Enabled by default
 - **ci** - Enabled by default
 - **security** 🆕 - Enabled by default (gracefully handles missing GHAS)
-- **releases** 🆕 - Enabled by default
+- **releases** 🆕 - Enabled by default (includes deployment metrics)
 - **branches** 🆕 - Enabled by default, configurable stale threshold (90 days)
+- **dependencies** 🆕 - Enabled by default (multi-language support)
+
+### Output Modes
+
+gh-inspect offers three output modes to control how findings and recommendations are presented:
+
+#### Observational (Default)
+
+Presents neutral, factual observations about your repository:
+
+- Focus on "what is" rather than "what should be"
+- Metrics and facts without prescriptive language
+- Ideal for teams that prefer to draw their own conclusions
+
+#### Suggestive
+
+Provides prescriptive advice and actionable recommendations:
+
+- Findings include "Why this matters" explanations
+- Specific action items for improvement
+- Best for teams seeking guidance on best practices
+
+#### Statistical
+
+Shows metrics and numbers with minimal explanatory text:
+
+- Compact output focused on quantitative data
+- Perfect for dashboards and programmatic analysis
+- Reduces noise for data-driven workflows
+
+**Usage:**
+
+```bash
+# Set via command-line flag
+gh-inspect run owner/repo --output-mode=suggestive
+
+# Or save preference to config
+gh-inspect config set global.output_mode suggestive
+
+# Flag always overrides config setting
+gh-inspect run owner/repo --output-mode=statistical
+```
 
 ## 🔍 Included Analyzers
 
-gh-inspect includes 7 comprehensive analyzers that examine different aspects of your repository health:
+gh-inspect includes 9 comprehensive analyzers that examine different aspects of your repository health:
 
-| Analyzer          | Description                      | Key Metrics                                                         |
-| ----------------- | -------------------------------- | ------------------------------------------------------------------- |
-| **Activity**      | Contributor engagement & growth  | Bus Factor, Stars/Forks, New Contributors, Commit Velocity          |
-| **PR Flow**       | Review velocity & quality        | Cycle Time, Self-Merge Rate, Draft Adoption, Description Quality    |
-| **Issue Hygiene** | Backlog health & responsiveness  | Time to First Response, Assignee Coverage, Bug/Feature Ratio        |
-| **Repo Health**   | Governance & best practices      | Branch Protection, Dependency Management, Key Files (LICENSE, etc.) |
-| **CI Stability**  | Build health & reliability       | Success Rate, Workflow Cost, Average Runtime                        |
-| **Security** 🆕   | Vulnerability & secret detection | Dependabot Alerts, Secret Scanning, Code Scanning                   |
-| **Releases** 🆕   | Release management & cadence     | Release Frequency, Changelog Coverage, Semantic Versioning          |
-| **Branches** 🆕   | Branch management                | Total Branches, Stale Branches, Branch Health                       |
+| Analyzer            | Description                      | Key Metrics                                                                     |
+| ------------------- | -------------------------------- | ------------------------------------------------------------------------------- |
+| **Activity**        | Contributor engagement & growth  | Bus Factor, Stars/Forks, New Contributors, Commit Velocity, Code Quality        |
+| **PR Flow**         | Review velocity & quality        | Cycle Time, Self-Merge Rate, Draft Adoption, Description Quality, Collaboration |
+| **Issue Hygiene**   | Backlog health & responsiveness  | Time to First Response, Assignee Coverage, Bug/Feature Ratio                    |
+| **Repo Health**     | Governance & best practices      | Branch Protection, Dependency Management, Key Files (LICENSE, etc.)             |
+| **CI Stability**    | Build health & reliability       | Success Rate, Workflow Cost, Average Runtime                                    |
+| **Security** 🆕     | Vulnerability & secret detection | Dependabot Alerts, Secret Scanning, Code Scanning                               |
+| **Releases** 🆕     | Release & deployment management  | Release Frequency, Deployment Metrics, Changelog Coverage, Semantic Versioning  |
+| **Branches** 🆕     | Branch management                | Total Branches, Stale Branches, Branch Health                                   |
+| **Dependencies** 🆕 | Dependency management            | Package Managers, Dependency Counts, Lock Files, Version Pinning                |
 
 ### Analyzer Details
 
 #### Activity Analyzer
 
-Tracks contributor engagement and repository popularity:
+Tracks contributor engagement, repository popularity, and code quality:
 
 - **Commits Total** - Number of commits in the analysis window
 - **Commit Velocity** - Average commits per day
@@ -712,10 +779,14 @@ Tracks contributor engagement and repository popularity:
 - **Stars** 🆕 - Repository star count
 - **Forks** 🆕 - Repository fork count
 - **Watchers** 🆕 - Repository watchers count
+- **Code Churn Ratio** 🆕 - Ratio of additions to deletions in PRs
+- **Review Coverage** 🆕 - Percentage of PRs that received reviews
+- **Merge Without Review Rate** 🆕 - PRs merged without any reviews
+- **Avg Review Depth** 🆕 - Average number of review comments per PR
 
 #### PR Flow Analyzer
 
-Analyzes pull request efficiency and quality:
+Analyzes pull request efficiency, quality, and collaboration:
 
 - **Avg Cycle Time** - Time from PR creation to merge
 - **Avg Time to First Review** 🆕 - How quickly PRs get initial feedback
@@ -725,6 +796,11 @@ Analyzes pull request efficiency and quality:
 - **Draft PR Rate** 🆕 - Adoption of draft PR workflow
 - **Description Quality** 🆕 - PRs with meaningful descriptions
 - **Avg PR Size** - Lines changed per PR
+- **Unique Reviewers** 🆕 - Distinct code reviewers actively participating
+- **Avg Reviewers per PR** 🆕 - Average number of reviewers assigned per PR
+- **Cross-Author Collaboration** 🆕 - Average reviewers per unique author
+- **PR Discussion Depth** 🆕 - Average comments per PR
+- **Review Participation** 🆕 - Count of active reviewers in the window
 
 #### Issue Hygiene Analyzer
 
@@ -783,7 +859,7 @@ Scans for vulnerabilities and security issues:
 
 #### Releases Analyzer 🆕
 
-Tracks release management practices:
+Tracks release management practices and deployment patterns:
 
 - **Releases in Window** - Number of releases created
 - **Release Frequency** - Average releases per month
@@ -791,6 +867,10 @@ Tracks release management practices:
 - **Changelog Coverage** - Releases with notes
 - **Semver Compliance** - Semantic versioning adoption
 - **Pre-release Ratio** - Beta vs stable releases
+- **Days Since Last Release** 🆕 - Time elapsed since most recent release
+- **Release Consistency** 🆕 - Coefficient of variation for release cadence (lower is more consistent)
+- **Rapid Releases** 🆕 - Count of releases within 2 hours (potential hotfixes)
+- **Stable Releases** 🆕 - Count of non-prerelease versions
 
 #### Branches Analyzer 🆕
 
@@ -800,6 +880,35 @@ Monitors branch management hygiene:
 - **Stale Branches** - Branches inactive beyond threshold (default: 90 days)
 - Flags repositories with too many branches (>50)
 - Identifies cleanup opportunities
+
+#### Dependencies Analyzer 🆕
+
+Analyzes dependency management across multiple languages:
+
+- **Package Managers** - Detected package managers (npm, yarn, pnpm, go-modules, pip, pipenv, poetry, cargo, maven, gradle, bundler, composer, nuget)
+- **Total Dependencies** - Aggregate dependency count across all languages
+- **Language-Specific Counts** - npm_dependencies, go_dependencies, python_dependencies, rust_dependencies
+- **NPM Dev Dependencies** - Development-only npm packages
+- **Python Pinned Versions** - Percentage of Python dependencies with pinned versions
+- **Lock Files** - Detected lock files (package-lock.json, yarn.lock, Pipfile.lock, Cargo.lock, etc.)
+
+**Findings:**
+
+- **No Dependency Management** - No package manager detected
+- **Unpinned Dependencies** - Python dependencies without version pins
+- **Dependency Bloat** - Projects with >100 total dependencies
+- **Missing Lock File** - No lock file detected for reproducible builds
+
+**Supported Languages:**
+
+- JavaScript/TypeScript (npm, yarn, pnpm)
+- Go (go.mod)
+- Python (requirements.txt, Pipfile, pyproject.toml)
+- Rust (Cargo.toml)
+- Java (pom.xml, build.gradle)
+- Ruby (Gemfile)
+- PHP (composer.json)
+- C# (packages.config, .csproj)
 
 All analyzers work with `run`, `org`, `user`, and `compare` commands!
 
@@ -920,7 +1029,7 @@ For a **moderately active repository** (50-100 commits/week) with default 30d wi
 - **Standard** (`--depth=standard`): ~25-40 API calls per repository
 - **Deep** (`--depth=deep`): ~50-100 API calls per repository
 
-**With Caching:** Second runs within 24 hours use 30-50% fewer API calls.
+**With Caching:** Second runs within 1 hour use 30-50% fewer API calls.
 
 With authentication, you have 5,000 requests/hour, which allows analyzing:
 

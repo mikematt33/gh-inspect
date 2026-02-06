@@ -17,7 +17,7 @@ var cacheCmd = &cobra.Command{
 	Short: "Manage the API response cache",
 	Long: `Manage the disk-based cache for GitHub API responses.
 The cache stores API responses locally to reduce API rate limit usage and speed up repeated analyses.
-Cached data expires after 24 hours by default.`,
+Cached data expires after 1 hour by default.`,
 }
 
 var cacheClearCmd = &cobra.Command{
@@ -101,5 +101,5 @@ func runCacheStats(cmd *cobra.Command, args []string) {
 	fmt.Printf("  Location: %s\n", cachePath)
 	fmt.Printf("  Entries: %d\n", count)
 	fmt.Printf("  Size: %.2f MB\n", float64(size)/(1024*1024))
-	fmt.Printf("  TTL: 24 hours\n")
+	fmt.Printf("  TTL: 1 hour\n")
 }

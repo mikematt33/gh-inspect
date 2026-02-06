@@ -22,6 +22,7 @@ const (
 // RenderOptions contains options for rendering reports
 type RenderOptions struct {
 	ShowExplanation bool
+	OutputMode      models.OutputMode
 }
 
 type Renderer interface {
@@ -124,7 +125,11 @@ func (r *TextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opt
 		}
 
 		// 3. Opinionated Insights & Score
-		repoInsights := insights.GenerateInsights(repo)
+		outputMode := opts.OutputMode
+		if outputMode == "" {
+			outputMode = models.OutputModeObservational // default
+		}
+		repoInsights := insights.GenerateInsights(repo, outputMode)
 		engScore := insights.CalculateEngineeringHealthScore(repo)
 
 		_, _ = fmt.Fprintf(w, "\n[ opinionated-insights ]\n")
@@ -132,7 +137,7 @@ func (r *TextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opt
 
 		// Show score explanation if requested
 		if opts.ShowExplanation {
-			scoreComponents := insights.ExplainScore(repo)
+			scoreComponents := insights.ExplainScore(repo, outputMode)
 			if len(scoreComponents) > 0 {
 				_, _ = fmt.Fprintln(w, "")
 				_, _ = fmt.Fprintln(w, "  Score Breakdown:")

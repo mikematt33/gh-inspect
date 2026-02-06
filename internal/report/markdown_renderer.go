@@ -37,7 +37,11 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 
 		// Show score breakdown if requested
 		if opts.ShowExplanation {
-			r.renderScoreBreakdown(repo, engScore, w)
+			outputMode := opts.OutputMode
+			if outputMode == "" {
+				outputMode = models.OutputModeObservational
+			}
+			r.renderScoreBreakdown(repo, engScore, w, outputMode)
 		}
 
 		// Key Metrics Summary
@@ -130,7 +134,11 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 		}
 
 		// Insights
-		repoInsights := insights.GenerateInsights(repo)
+		outputMode := opts.OutputMode
+		if outputMode == "" {
+			outputMode = models.OutputModeObservational // default
+		}
+		repoInsights := insights.GenerateInsights(repo, outputMode)
 		if len(repoInsights) > 0 {
 			_, _ = fmt.Fprintln(w, "#### 💡 Recommendations")
 			_, _ = fmt.Fprintln(w, "")
@@ -189,8 +197,11 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 	return nil
 }
 
-func (r *MarkdownRenderer) renderScoreBreakdown(repo models.RepoResult, engScore int, w io.Writer) {
-	scoreComponents := insights.ExplainScore(repo)
+func (r *MarkdownRenderer) renderScoreBreakdown(repo models.RepoResult, engScore int, w io.Writer, outputMode models.OutputMode) {
+	if outputMode == "" {
+		outputMode = models.OutputModeObservational // default
+	}
+	scoreComponents := insights.ExplainScore(repo, outputMode)
 	if len(scoreComponents) == 0 {
 		return
 	}
