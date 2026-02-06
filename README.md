@@ -9,12 +9,17 @@
 ## 🚀 Key Features
 
 - **Engineering Health Score**: Aggregates hundreds of data points into a single 0-100 score.
+- **Flexible Output Modes**: Choose between suggestive (prescriptive advice), observational (neutral facts), or statistical (numbers only) presentation.
 - **Baseline & Regression Detection**: Track score changes over time and detect regressions automatically.
 - **Score Explanation**: Detailed breakdown showing why your score changed with improvement tips.
 - **Bus Factor Analysis**: Identifies if your project relies too heavily on single contributors.
+- **Code Quality Metrics**: Tracks code churn, review coverage, and review depth.
+- **Collaboration Metrics**: Measures reviewer engagement, cross-team collaboration, and discussion depth.
 - **PR Velocity**: Measures Cycle Time, Reviews per PR, and identifies "Giant PRs" that slow down development.
 - **Zombie Detection**: Finds stale issues and PRs that are clogging up your backlog.
 - **CI Insights**: Tracks workflow success rates, expensive runs, and stability.
+- **Deployment Metrics**: Analyzes release consistency, frequency, and rapid release patterns.
+- **Dependency Analysis**: Multi-language dependency detection and management insights.
 - **Smart Depth Control**: Choose between shallow, standard, or deep analysis with fine-grained API usage control.
 - **Recommendations Engine**: Get actionable suggestions with explanations for every finding.
 - **GitHub Actions Integration**: Markdown output optimized for PR comments and Actions summaries.
@@ -438,6 +443,23 @@ Useful for piping into other tools like `jq`.
 gh-inspect run owner/repo --format=json > report.json
 ```
 
+**Output Modes**
+Control how findings are presented to match your workflow:
+
+```bash
+# Observational (default) - Neutral facts and metrics
+gh-inspect run owner/repo
+
+# Suggestive - Prescriptive advice and recommendations
+gh-inspect run owner/repo --output-mode=suggestive
+
+# Statistical - Numbers only, minimal text
+gh-inspect run owner/repo --output-mode=statistical
+
+# Save output mode preference to config
+gh-inspect config set global.output_mode suggestive
+```
+
 **Quality Gate**
 Fail the command (exit code 1) if the health score is below 80. Perfect for CI pipelines.
 
@@ -521,13 +543,14 @@ gh-inspect user john --filter-language=typescript --filter-topics=web --filter-u
 
 **Available Analyzers:**
 
-- `activity` - Commit patterns, contributors, bus factor
-- `prflow` - Pull request velocity and cycle time
+- `activity` - Commit patterns, contributors, bus factor, and code quality metrics
+- `prflow` - Pull request velocity, cycle time, review, and collaboration metrics
 - `ci` - CI/CD workflow success rates
 - `issues` - Issue hygiene and zombie detection
 - `security` - Security advisories and vulnerabilities
-- `releases` - Release frequency and patterns
+- `releases` - Release frequency, deployment metrics, and versioning patterns
 - `branches` - Branch protection and stale branches
+- `dependencies` - Dependency management and package analysis
 - `health` - Repository health files (README, LICENSE, etc.)
 
 **Verbose Mode**
@@ -674,35 +697,78 @@ gh-inspect config set global.concurrency 10
 
 All analyzers can be enabled/disabled and configured:
 
-- **activity** - Always enabled (core metrics)
-- **pr_flow** - Enabled by default, configurable stale threshold
+- **activity** - Always enabled (core metrics including code quality)
+- **pr_flow** - Enabled by default, configurable stale threshold (includes collaboration metrics)
 - **issue_hygiene** - Enabled by default, configurable stale/zombie thresholds
 - **repo_health** - Enabled by default
 - **ci** - Enabled by default
 - **security** 🆕 - Enabled by default (gracefully handles missing GHAS)
-- **releases** 🆕 - Enabled by default
+- **releases** 🆕 - Enabled by default (includes deployment metrics)
 - **branches** 🆕 - Enabled by default, configurable stale threshold (90 days)
+- **dependencies** 🆕 - Enabled by default (multi-language support)
+
+### Output Modes
+
+gh-inspect offers three output modes to control how findings and recommendations are presented:
+
+#### Observational (Default)
+
+Presents neutral, factual observations about your repository:
+
+- Focus on "what is" rather than "what should be"
+- Metrics and facts without prescriptive language
+- Ideal for teams that prefer to draw their own conclusions
+
+#### Suggestive
+
+Provides prescriptive advice and actionable recommendations:
+
+- Findings include "Why this matters" explanations
+- Specific action items for improvement
+- Best for teams seeking guidance on best practices
+
+#### Statistical
+
+Shows metrics and numbers with minimal explanatory text:
+
+- Compact output focused on quantitative data
+- Perfect for dashboards and programmatic analysis
+- Reduces noise for data-driven workflows
+
+**Usage:**
+
+```bash
+# Set via command-line flag
+gh-inspect run owner/repo --output-mode=suggestive
+
+# Or save preference to config
+gh-inspect config set global.output_mode suggestive
+
+# Flag always overrides config setting
+gh-inspect run owner/repo --output-mode=statistical
+```
 
 ## 🔍 Included Analyzers
 
-gh-inspect includes 7 comprehensive analyzers that examine different aspects of your repository health:
+gh-inspect includes 9 comprehensive analyzers that examine different aspects of your repository health:
 
-| Analyzer          | Description                      | Key Metrics                                                         |
-| ----------------- | -------------------------------- | ------------------------------------------------------------------- |
-| **Activity**      | Contributor engagement & growth  | Bus Factor, Stars/Forks, New Contributors, Commit Velocity          |
-| **PR Flow**       | Review velocity & quality        | Cycle Time, Self-Merge Rate, Draft Adoption, Description Quality    |
-| **Issue Hygiene** | Backlog health & responsiveness  | Time to First Response, Assignee Coverage, Bug/Feature Ratio        |
-| **Repo Health**   | Governance & best practices      | Branch Protection, Dependency Management, Key Files (LICENSE, etc.) |
-| **CI Stability**  | Build health & reliability       | Success Rate, Workflow Cost, Average Runtime                        |
-| **Security** 🆕   | Vulnerability & secret detection | Dependabot Alerts, Secret Scanning, Code Scanning                   |
-| **Releases** 🆕   | Release management & cadence     | Release Frequency, Changelog Coverage, Semantic Versioning          |
-| **Branches** 🆕   | Branch management                | Total Branches, Stale Branches, Branch Health                       |
+| Analyzer            | Description                      | Key Metrics                                                                     |
+| ------------------- | -------------------------------- | ------------------------------------------------------------------------------- |
+| **Activity**        | Contributor engagement & growth  | Bus Factor, Stars/Forks, New Contributors, Commit Velocity, Code Quality        |
+| **PR Flow**         | Review velocity & quality        | Cycle Time, Self-Merge Rate, Draft Adoption, Description Quality, Collaboration |
+| **Issue Hygiene**   | Backlog health & responsiveness  | Time to First Response, Assignee Coverage, Bug/Feature Ratio                    |
+| **Repo Health**     | Governance & best practices      | Branch Protection, Dependency Management, Key Files (LICENSE, etc.)             |
+| **CI Stability**    | Build health & reliability       | Success Rate, Workflow Cost, Average Runtime                                    |
+| **Security** 🆕     | Vulnerability & secret detection | Dependabot Alerts, Secret Scanning, Code Scanning                               |
+| **Releases** 🆕     | Release & deployment management  | Release Frequency, Deployment Metrics, Changelog Coverage, Semantic Versioning  |
+| **Branches** 🆕     | Branch management                | Total Branches, Stale Branches, Branch Health                                   |
+| **Dependencies** 🆕 | Dependency management            | Package Managers, Dependency Counts, Lock Files, Version Pinning                |
 
 ### Analyzer Details
 
 #### Activity Analyzer
 
-Tracks contributor engagement and repository popularity:
+Tracks contributor engagement, repository popularity, and code quality:
 
 - **Commits Total** - Number of commits in the analysis window
 - **Commit Velocity** - Average commits per day
@@ -712,10 +778,14 @@ Tracks contributor engagement and repository popularity:
 - **Stars** 🆕 - Repository star count
 - **Forks** 🆕 - Repository fork count
 - **Watchers** 🆕 - Repository watchers count
+- **Code Churn Ratio** 🆕 - Ratio of additions to deletions in PRs
+- **Review Coverage** 🆕 - Percentage of PRs that received reviews
+- **Merge Without Review Rate** 🆕 - PRs merged without any reviews
+- **Avg Review Depth** 🆕 - Average number of review comments per PR
 
 #### PR Flow Analyzer
 
-Analyzes pull request efficiency and quality:
+Analyzes pull request efficiency, quality, and collaboration:
 
 - **Avg Cycle Time** - Time from PR creation to merge
 - **Avg Time to First Review** 🆕 - How quickly PRs get initial feedback
@@ -725,6 +795,11 @@ Analyzes pull request efficiency and quality:
 - **Draft PR Rate** 🆕 - Adoption of draft PR workflow
 - **Description Quality** 🆕 - PRs with meaningful descriptions
 - **Avg PR Size** - Lines changed per PR
+- **Unique Reviewers** 🆕 - Distinct code reviewers actively participating
+- **Avg Reviewers per PR** 🆕 - Average number of reviewers assigned per PR
+- **Cross-Author Collaboration** 🆕 - Average reviewers per unique author
+- **PR Discussion Depth** 🆕 - Average comments per PR
+- **Review Participation** 🆕 - Count of active reviewers in the window
 
 #### Issue Hygiene Analyzer
 
@@ -783,7 +858,7 @@ Scans for vulnerabilities and security issues:
 
 #### Releases Analyzer 🆕
 
-Tracks release management practices:
+Tracks release management practices and deployment patterns:
 
 - **Releases in Window** - Number of releases created
 - **Release Frequency** - Average releases per month
@@ -791,6 +866,10 @@ Tracks release management practices:
 - **Changelog Coverage** - Releases with notes
 - **Semver Compliance** - Semantic versioning adoption
 - **Pre-release Ratio** - Beta vs stable releases
+- **Days Since Last Release** 🆕 - Time elapsed since most recent release
+- **Release Consistency** 🆕 - Coefficient of variation for release cadence (lower is more consistent)
+- **Rapid Releases** 🆕 - Count of releases within 2 hours (potential hotfixes)
+- **Stable Releases** 🆕 - Count of non-prerelease versions
 
 #### Branches Analyzer 🆕
 
@@ -800,6 +879,35 @@ Monitors branch management hygiene:
 - **Stale Branches** - Branches inactive beyond threshold (default: 90 days)
 - Flags repositories with too many branches (>50)
 - Identifies cleanup opportunities
+
+#### Dependencies Analyzer 🆕
+
+Analyzes dependency management across multiple languages:
+
+- **Package Managers** - Detected package managers (npm, yarn, pnpm, go-modules, pip, pipenv, poetry, cargo, maven, gradle, bundler, composer, nuget)
+- **Total Dependencies** - Aggregate dependency count across all languages
+- **Language-Specific Counts** - npm_dependencies, go_dependencies, python_dependencies, rust_dependencies
+- **NPM Dev Dependencies** - Development-only npm packages
+- **Python Pinned Versions** - Percentage of Python dependencies with pinned versions
+- **Lock Files** - Detected lock files (package-lock.json, yarn.lock, Pipfile.lock, Cargo.lock, etc.)
+
+**Findings:**
+
+- **No Dependency Management** - No package manager detected
+- **Unpinned Dependencies** - Python dependencies without version pins
+- **Dependency Bloat** - Projects with >100 total dependencies
+- **Missing Lock File** - No lock file detected for reproducible builds
+
+**Supported Languages:**
+
+- JavaScript/TypeScript (npm, yarn, pnpm)
+- Go (go.mod)
+- Python (requirements.txt, Pipfile, pyproject.toml)
+- Rust (Cargo.toml)
+- Java (pom.xml, build.gradle)
+- Ruby (Gemfile)
+- PHP (composer.json)
+- C# (packages.config, .csproj)
 
 All analyzers work with `run`, `org`, `user`, and `compare` commands!
 

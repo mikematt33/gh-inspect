@@ -156,8 +156,10 @@ func TestUninstallSymlinkResolution(t *testing.T) {
 		t.Fatalf("Failed to evaluate symlink: %v", err)
 	}
 
-	if realPath != fakeBinary {
-		t.Errorf("Expected real path '%s', got '%s'", fakeBinary, realPath)
+	// On macOS, temp paths may include /private prefix, normalize both paths
+	expectedPath, _ := filepath.EvalSymlinks(fakeBinary)
+	if realPath != expectedPath {
+		t.Errorf("Expected real path '%s', got '%s'", expectedPath, realPath)
 	}
 
 	// Remove the real binary

@@ -14,6 +14,7 @@ import (
 	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/activity"
 	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/branches"
 	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/ci"
+	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/dependencies"
 	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/issuehygiene"
 	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/prflow"
 	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/releases"
@@ -46,6 +47,7 @@ type AnalysisOptions struct {
 	MaxWorkflowRuns int
 	Include         []string
 	Exclude         []string
+	OutputMode      string
 }
 
 var pipelineRunner = RunAnalysisPipeline
@@ -122,10 +124,24 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	depthCfg := analysis.GetDepthConfig(opts.Depth)
 	depthCfg = depthCfg.ApplyOverrides(opts.MaxPRs, opts.MaxIssues, opts.MaxWorkflowRuns)
 
+	// Parse and validate output mode
+	var outputMode models.OutputMode
+	switch opts.OutputMode {
+	case "suggestive":
+		outputMode = models.OutputModeSuggestive
+	case "observational", "":
+		outputMode = models.OutputModeObservational
+	case "statistical":
+		outputMode = models.OutputModeStatistical
+	default:
+		return nil, fmt.Errorf("invalid output mode: %s. Use 'suggestive', 'observational', or 'statistical'", opts.OutputMode)
+	}
+
 	analysisCfg := analysis.Config{
 		Since:       time.Now().Add(-duration),
 		IncludeDeep: depthCfg.IncludeDeep,
 		DepthConfig: depthCfg,
+		OutputMode:  outputMode,
 	}
 
 	// 3. Setup Dependencies
@@ -192,6 +208,10 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 
 	if cfg.Analyzers.Branches.Enabled && shouldIncludeAnalyzer("branches", opts.Include, opts.Exclude) {
 		analyzers = append(analyzers, branches.New(cfg.Analyzers.Branches.Params.StaleThresholdDays))
+	}
+
+	if cfg.Analyzers.Dependencies.Enabled && shouldIncludeAnalyzer("dependencies", opts.Include, opts.Exclude) {
+		analyzers = append(analyzers, dependencies.New())
 	}
 
 	start := time.Now()

@@ -104,6 +104,10 @@ func Load(path string) (*Baseline, error) {
 
 // Compare generates a comparison between current and previous reports
 func Compare(current *models.Report, previous *Baseline) *ComparisonResult {
+	if current == nil || previous == nil || previous.Report == nil {
+		return nil
+	}
+
 	result := &ComparisonResult{
 		Current:  current,
 		Previous: previous,

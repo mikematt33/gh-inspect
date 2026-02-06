@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/mikematt33/gh-inspect/internal/config"
 	"github.com/mikematt33/gh-inspect/internal/report"
 	"github.com/spf13/cobra"
 )
@@ -14,12 +15,16 @@ var compareCmd = &cobra.Command{
 	Long: `Run analysis on multiple repositories and display metrics in a comparison table.
 Useful for benchmarking internal projects against each other or comparing against open source standards.
 
-Minimum 2 repositories required. Supports all analysis flags including --quiet and --verbose.`,
+Minimum 2 repositories required. Supports --quiet and --verbose flags.`,
 	Example: `  gh-inspect compare owner/repo1 owner/repo2
-  gh-inspect compare owner/repo1 owner/repo2 owner/repo3 --since=90d
-  gh-inspect compare owner/repo1 owner/repo2 --format=json
-  gh-inspect compare owner/repo1 owner/repo2 --include=activity,ci`,
+  gh-inspect compare owner/repo1 owner/repo2 owner/repo3
+  gh-inspect compare owner/repo1 owner/repo2 --format=json`,
 	Args: func(cmd *cobra.Command, args []string) error {
+		// Validate format
+		if flagFormat != "" && flagFormat != "text" && flagFormat != "json" && flagFormat != "markdown" {
+			return fmt.Errorf("invalid format: %s (must be text, json, or markdown)", flagFormat)
+		}
+
 		if flagListAnalyzers {
 			return nil // Allow no args when listing analyzers
 		}
@@ -35,6 +40,21 @@ Minimum 2 repositories required. Supports all analysis flags including --quiet a
 }
 
 func runComparison(cmd *cobra.Command, args []string) {
+	// Load config to get output mode preference
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Printf("Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Resolve output mode: flag overrides config, config overrides default
+	resolvedOutputMode := "observational" // default
+	if flagOutputMode != "" {
+		resolvedOutputMode = flagOutputMode
+	} else if cfg.Global.OutputMode != "" {
+		resolvedOutputMode = cfg.Global.OutputMode
+	}
+
 	opts := AnalysisOptions{
 		Repos:           args,
 		Since:           flagSince,
@@ -44,6 +64,7 @@ func runComparison(cmd *cobra.Command, args []string) {
 		MaxWorkflowRuns: flagMaxWorkflowRuns,
 		Include:         flagInclude,
 		Exclude:         flagExclude,
+		OutputMode:      resolvedOutputMode,
 	}
 
 	fullReport, err := pipelineRunner(opts)

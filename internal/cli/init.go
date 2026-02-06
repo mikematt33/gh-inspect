@@ -15,6 +15,7 @@ const defaultConfig = `# gh-inspect Configuration
 global:
   timeout: "2m"
   concurrency: 5 # Max concurrent repo analysis
+  output_mode: "observational" # How findings are presented: observational (default), suggestive, statistical
   # github_token: "YOUR_TOKEN" # Optional: Store token here (not recommended for shared machines)
 
 # Output configuration

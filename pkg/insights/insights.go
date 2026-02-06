@@ -18,12 +18,15 @@ const (
 type Insight struct {
 	Level       InsightLevel
 	Category    string
-	Description string
-	Action      string
+	Description string // Main message (mode-aware)
+	Action      string // Suggestive mode: prescriptive advice
+	Observation string // Observational mode: neutral facts
+	StatValue   string // Statistical mode: just the number
 }
 
 // GenerateInsights analyzes a single repository report and produces actionable insights
-func GenerateInsights(repo models.RepoResult) []Insight {
+// The output format is controlled by the outputMode parameter
+func GenerateInsights(repo models.RepoResult, outputMode models.OutputMode) []Insight {
 	var insights []Insight
 
 	// Helper to safely get metric
@@ -40,16 +43,36 @@ func GenerateInsights(repo models.RepoResult) []Insight {
 		return 0, false
 	}
 
+	// Helper to format messages based on output mode
+	formatMessage := func(statValue string, observation string, action string) string {
+		switch outputMode {
+		case models.OutputModeStatistical:
+			return statValue
+		case models.OutputModeObservational:
+			return observation
+		case models.OutputModeSuggestive:
+			return observation + " " + action
+		default:
+			return observation
+		}
+	}
+
 	// 1. Bus Factor Analysis
 	busFactor, bfOk := getMetric("activity", "bus_factor")
 	activeContributors, acOk := getMetric("activity", "active_contributors")
 
 	if bfOk && acOk && busFactor == 1 && activeContributors > 1 {
 		insights = append(insights, Insight{
-			Level:       LevelCritical,
-			Category:    "Resilience",
-			Description: "Bus Factor is 1. A single developer is responsible for >=50% of recent commits.",
-			Action:      "Encourage knowledge sharing and pair programming to reduce single usage points of failure.",
+			Level:    LevelCritical,
+			Category: "Resilience",
+			Description: formatMessage(
+				"Bus Factor: 1",
+				"Bus factor is 1. A single developer is responsible for >=50% of recent commits.",
+				"Encourage knowledge sharing and pair programming to reduce single points of failure.",
+			),
+			Action:      "Encourage knowledge sharing and pair programming to reduce single points of failure.",
+			Observation: "Bus factor is 1. A single developer is responsible for >=50% of recent commits.",
+			StatValue:   "Bus Factor: 1",
 		})
 	}
 
@@ -58,17 +81,29 @@ func GenerateInsights(repo models.RepoResult) []Insight {
 	if srOk {
 		if successRate < 50.0 {
 			insights = append(insights, Insight{
-				Level:       LevelCritical,
-				Category:    "Velocity",
-				Description: fmt.Sprintf("CI active but success rate is dangerously low (%.1f%%).", successRate),
+				Level:    LevelCritical,
+				Category: "Velocity",
+				Description: formatMessage(
+					fmt.Sprintf("CI Success Rate: %.1f%%", successRate),
+					fmt.Sprintf("CI is active but success rate is %.1f%%.", successRate),
+					"Prioritize fixing flaky tests or broken build steps immediately to unblock the team.",
+				),
 				Action:      "Prioritize fixing flaky tests or broken build steps immediately to unblock the team.",
+				Observation: fmt.Sprintf("CI is active but success rate is %.1f%%.", successRate),
+				StatValue:   fmt.Sprintf("CI Success Rate: %.1f%%", successRate),
 			})
 		} else if successRate < 80.0 {
 			insights = append(insights, Insight{
-				Level:       LevelWarning,
-				Category:    "Velocity",
-				Description: fmt.Sprintf("CI success rate is suboptimal (%.1f%%).", successRate),
+				Level:    LevelWarning,
+				Category: "Velocity",
+				Description: formatMessage(
+					fmt.Sprintf("CI Success Rate: %.1f%%", successRate),
+					fmt.Sprintf("CI success rate is %.1f%%.", successRate),
+					"Investigate common failure patterns to improve developer confidence.",
+				),
 				Action:      "Investigate common failure patterns to improve developer confidence.",
+				Observation: fmt.Sprintf("CI success rate is %.1f%%.", successRate),
+				StatValue:   fmt.Sprintf("CI Success Rate: %.1f%%", successRate),
 			})
 		}
 	}
@@ -77,10 +112,16 @@ func GenerateInsights(repo models.RepoResult) []Insight {
 	zombies, zOk := getMetric("issue-hygiene", "zombie_issues")
 	if zOk && zombies > 10 {
 		insights = append(insights, Insight{
-			Level:       LevelWarning,
-			Category:    "Maintenance",
-			Description: fmt.Sprintf("High number of zombie issues detected (%d).", int(zombies)),
+			Level:    LevelWarning,
+			Category: "Maintenance",
+			Description: formatMessage(
+				fmt.Sprintf("Zombie Issues: %d", int(zombies)),
+				fmt.Sprintf("%d zombie issues detected (inactive >90 days).", int(zombies)),
+				"Schedule a 'bug bash' or bulk-close outdated issues to clean up the backlog.",
+			),
 			Action:      "Schedule a 'bug bash' or bulk-close outdated issues to clean up the backlog.",
+			Observation: fmt.Sprintf("%d zombie issues detected (inactive >90 days).", int(zombies)),
+			StatValue:   fmt.Sprintf("Zombie Issues: %d", int(zombies)),
 		})
 	}
 
@@ -88,10 +129,16 @@ func GenerateInsights(repo models.RepoResult) []Insight {
 	cycleTime, ctOk := getMetric("pr-flow", "avg_cycle_time_hours")
 	if ctOk && cycleTime > 72.0 { // 3 days
 		insights = append(insights, Insight{
-			Level:       LevelInfo,
-			Category:    "Velocity",
-			Description: fmt.Sprintf("Average PR cycle time is high (%.1fh).", cycleTime),
+			Level:    LevelInfo,
+			Category: "Velocity",
+			Description: formatMessage(
+				fmt.Sprintf("Avg PR Cycle Time: %.1fh", cycleTime),
+				fmt.Sprintf("Average PR cycle time is %.1fh.", cycleTime),
+				"Review PR size and review process. Smaller PRs usually merge faster.",
+			),
 			Action:      "Review PR size and review process. Smaller PRs usually merge faster.",
+			Observation: fmt.Sprintf("Average PR cycle time is %.1fh.", cycleTime),
+			StatValue:   fmt.Sprintf("Avg PR Cycle Time: %.1fh", cycleTime),
 		})
 	}
 
@@ -189,11 +236,12 @@ type ScoreComponent struct {
 	Impact      int    // Points deducted
 	Current     string // Current value
 	Target      string // Target/ideal value
-	Tips        string // Improvement suggestion
+	Tips        string // Mode-aware improvement information
 }
 
 // ExplainScore returns detailed breakdown of how the health score was calculated
-func ExplainScore(repo models.RepoResult) []ScoreComponent {
+// The output format is controlled by the outputMode parameter
+func ExplainScore(repo models.RepoResult, outputMode models.OutputMode) []ScoreComponent {
 	var components []ScoreComponent
 
 	getMetric := func(analyzerName, key string) (float64, bool) {
@@ -209,6 +257,20 @@ func ExplainScore(repo models.RepoResult) []ScoreComponent {
 		return 0, false
 	}
 
+	// Helper to format tips based on mode
+	formatTips := func(statisticalMsg, observationalMsg, suggestiveMsg string) string {
+		switch outputMode {
+		case models.OutputModeStatistical:
+			return statisticalMsg
+		case models.OutputModeObservational:
+			return observationalMsg
+		case models.OutputModeSuggestive:
+			return suggestiveMsg
+		default:
+			return observationalMsg
+		}
+	}
+
 	// CI Stability (Weight: 30)
 	successRate, srOk := getMetric("ci", "success_rate")
 	if srOk {
@@ -217,10 +279,18 @@ func ExplainScore(repo models.RepoResult) []ScoreComponent {
 
 		if successRate < 50 {
 			impact = 30
-			tips = "Fix failing builds immediately. CI below 50% blocks team productivity."
+			tips = formatTips(
+				"",
+				"CI success rate below 50% correlates with reduced team productivity.",
+				"Fix failing builds immediately. CI below 50% blocks team productivity.",
+			)
 		} else if successRate < 90 {
 			impact = 15
-			tips = "Investigate flaky tests and common failure patterns."
+			tips = formatTips(
+				"",
+				"CI success rate between 50-90% suggests intermittent build issues.",
+				"Investigate flaky tests and common failure patterns.",
+			)
 		}
 
 		components = append(components, ScoreComponent{
@@ -242,7 +312,11 @@ func ExplainScore(repo models.RepoResult) []ScoreComponent {
 
 		if busFactor == 1 && activeContributors > 1 {
 			impact = 20
-			tips = "One person is doing >50% of commits. Encourage pair programming and knowledge sharing."
+			tips = formatTips(
+				"",
+				"Single contributor accounts for >50% of commits.",
+				"One person is doing >50% of commits. Encourage pair programming and knowledge sharing.",
+			)
 		}
 
 		components = append(components, ScoreComponent{
@@ -263,10 +337,18 @@ func ExplainScore(repo models.RepoResult) []ScoreComponent {
 
 		if zombies > 50 {
 			impact = 15
-			tips = "High zombie count. Schedule a bug bash to close stale issues."
+			tips = formatTips(
+				"",
+				"High volume of inactive issues (>90 days without updates).",
+				"High zombie count. Schedule a bug bash to close stale issues.",
+			)
 		} else if zombies > 10 {
 			impact = 5
-			tips = "Some stale issues detected. Review and close outdated items."
+			tips = formatTips(
+				"",
+				"Moderate number of inactive issues detected.",
+				"Some stale issues detected. Review and close outdated items.",
+			)
 		}
 
 		components = append(components, ScoreComponent{
@@ -300,9 +382,13 @@ func ExplainScore(repo models.RepoResult) []ScoreComponent {
 			impact = 20
 		}
 
-		tips := "Add missing documentation files to improve project health."
-		if len(missingFileNames) > 0 {
-			tips = fmt.Sprintf("Missing: %v", missingFileNames[:util.Min(3, len(missingFileNames))])
+		tips := formatTips(
+			"",
+			fmt.Sprintf("Missing %d documentation files.", missingFiles),
+			"Add missing documentation files to improve project health.",
+		)
+		if len(missingFileNames) > 0 && outputMode != models.OutputModeStatistical {
+			tips += fmt.Sprintf(" Missing: %v", missingFileNames[:util.Min(3, len(missingFileNames))])
 		}
 
 		components = append(components, ScoreComponent{
@@ -328,13 +414,18 @@ func ExplainScore(repo models.RepoResult) []ScoreComponent {
 	}
 
 	if stalePRs > 5 {
+		tips := formatTips(
+			"",
+			fmt.Sprintf("%d pull requests inactive for >14 days.", stalePRs),
+			"Review and merge or close old PRs. Long-running PRs often have merge conflicts.",
+		)
 		components = append(components, ScoreComponent{
 			Category:    "PR Velocity",
 			Description: "Stale pull requests (>14 days old)",
 			Impact:      15,
 			Current:     fmt.Sprintf("%d stale", stalePRs),
 			Target:      "≤5",
-			Tips:        "Review and merge or close old PRs. Long-running PRs often have merge conflicts.",
+			Tips:        tips,
 		})
 	}
 

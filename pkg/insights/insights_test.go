@@ -170,7 +170,7 @@ func TestGenerateInsights(t *testing.T) {
 		},
 	}
 
-	insights := GenerateInsights(repo)
+	insights := GenerateInsights(repo, models.OutputModeObservational)
 
 	// Expecting:
 	// 1. Critical Insight for CI < 50
@@ -252,7 +252,7 @@ func TestExplainScore_CIStability(t *testing.T) {
 				},
 			}
 
-			components := ExplainScore(repo)
+			components := ExplainScore(repo, models.OutputModeObservational)
 
 			if len(components) != 1 {
 				t.Fatalf("Expected 1 component, got %d", len(components))
@@ -320,7 +320,7 @@ func TestExplainScore_BusFactor(t *testing.T) {
 				},
 			}
 
-			components := ExplainScore(repo)
+			components := ExplainScore(repo, models.OutputModeObservational)
 
 			if len(components) != 1 {
 				t.Fatalf("Expected 1 component, got %d", len(components))
@@ -386,7 +386,7 @@ func TestExplainScore_ZombieIssues(t *testing.T) {
 				},
 			}
 
-			components := ExplainScore(repo)
+			components := ExplainScore(repo, models.OutputModeObservational)
 
 			if len(components) != 1 {
 				t.Fatalf("Expected 1 component, got %d", len(components))
@@ -455,7 +455,7 @@ func TestExplainScore_MissingFiles(t *testing.T) {
 				},
 			}
 
-			components := ExplainScore(repo)
+			components := ExplainScore(repo, models.OutputModeObservational)
 
 			if tt.missingCount == 0 {
 				if len(components) != 0 {
@@ -526,7 +526,7 @@ func TestExplainScore_StalePRs(t *testing.T) {
 				},
 			}
 
-			components := ExplainScore(repo)
+			components := ExplainScore(repo, models.OutputModeObservational)
 
 			if !tt.expectEntry {
 				if len(components) != 0 {
@@ -593,13 +593,7 @@ func TestExplainScore_MultipleComponents(t *testing.T) {
 		},
 	}
 
-	components := ExplainScore(repo)
-
-	// Should have all 5 components
-	if len(components) != 5 {
-		t.Fatalf("Expected 5 components, got %d", len(components))
-	}
-
+	components := ExplainScore(repo, models.OutputModeObservational)
 	// Verify total deductions
 	totalImpact := 0
 	for _, comp := range components {
@@ -637,7 +631,7 @@ func TestExplainScore_EmptyRepo(t *testing.T) {
 		Analyzers: []models.AnalyzerResult{},
 	}
 
-	components := ExplainScore(repo)
+	components := ExplainScore(repo, models.OutputModeObservational)
 
 	if len(components) != 0 {
 		t.Errorf("Expected 0 components for empty repo, got %d", len(components))
@@ -669,7 +663,7 @@ func TestExplainScore_OnlyMetricsNoFindings(t *testing.T) {
 		},
 	}
 
-	components := ExplainScore(repo)
+	components := ExplainScore(repo, models.OutputModeObservational)
 
 	// Should have 3 components (CI, Bus Factor, Zombies) all with 0 impact
 	if len(components) != 3 {

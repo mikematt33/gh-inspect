@@ -25,6 +25,16 @@ Displays a progress bar during analysis. Use --quiet for CI/CD environments.`,
   gh-inspect user octocat --filter-language=javascript
   gh-inspect user octocat --filter-skip-forks --filter-updated=180d`,
 	Args: func(cmd *cobra.Command, args []string) error {
+		// Validate format
+		if flagFormat != "" && flagFormat != "text" && flagFormat != "json" && flagFormat != "markdown" {
+			return fmt.Errorf("invalid format: %s (must be text, json, or markdown)", flagFormat)
+		}
+
+		// Validate depth
+		if flagDepth != "" && flagDepth != "shallow" && flagDepth != "standard" && flagDepth != "deep" {
+			return fmt.Errorf("invalid depth: %s (must be shallow, standard, or deep)", flagDepth)
+		}
+
 		if flagListAnalyzers {
 			return nil // Allow no args when listing analyzers
 		}
@@ -115,6 +125,21 @@ func runUserAnalysis(cmd *cobra.Command, args []string) {
 		return
 	}
 
+	// Load config to get output mode preference
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Printf("Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Resolve output mode: flag overrides config, config overrides default
+	resolvedOutputMode := "observational" // default
+	if flagOutputMode != "" {
+		resolvedOutputMode = flagOutputMode
+	} else if cfg.Global.OutputMode != "" {
+		resolvedOutputMode = cfg.Global.OutputMode
+	}
+
 	opts := AnalysisOptions{
 		Repos:           targetRepos,
 		Since:           flagSince, // Uses flags from root (or init above)
@@ -124,6 +149,7 @@ func runUserAnalysis(cmd *cobra.Command, args []string) {
 		MaxWorkflowRuns: flagMaxWorkflowRuns,
 		Include:         flagInclude,
 		Exclude:         flagExclude,
+		OutputMode:      resolvedOutputMode,
 	}
 
 	fullReport, err := pipelineRunner(opts)

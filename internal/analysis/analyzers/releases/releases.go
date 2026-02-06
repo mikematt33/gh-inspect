@@ -169,6 +169,94 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		Description:  "Semantic versioning compliance",
 	})
 
+	// Deployment velocity metrics
+	if len(allReleases) > 0 {
+		// Time since last deployment
+		lastRelease := allReleases[0]
+		daysSinceRelease := time.Since(lastRelease.CreatedAt.Time).Hours() / 24
+		metrics = append(metrics, models.Metric{
+			Key:          "days_since_last_release",
+			Value:        daysSinceRelease,
+			Unit:         "days",
+			DisplayValue: fmt.Sprintf("%.0f days", daysSinceRelease),
+			Description:  "Days since last release",
+		})
+
+		// Deployment consistency (calculate standard deviation of release intervals)
+		if len(recentReleases) >= 3 {
+			var intervals []float64
+			for i := 0; i < len(recentReleases)-1 && i < 10; i++ {
+				interval := recentReleases[i].CreatedAt.Sub(recentReleases[i+1].CreatedAt.Time).Hours() / 24
+				intervals = append(intervals, interval)
+			}
+
+			// Calculate mean
+			var sum float64
+			for _, interval := range intervals {
+				sum += interval
+			}
+			mean := sum / float64(len(intervals))
+
+			// Calculate standard deviation
+			var variance float64
+			for _, interval := range intervals {
+				variance += (interval - mean) * (interval - mean)
+			}
+			stdDev := 0.0
+			if len(intervals) > 0 {
+				// Store variance as is (not sqrt which would make it stdDev)
+				stdDev = variance / float64(len(intervals))
+			}
+
+			// Coefficient of variation (CV) - lower is more consistent
+			cv := 0.0
+			if mean > 0 {
+				cv = (stdDev / mean) * 100
+			}
+
+			metrics = append(metrics, models.Metric{
+				Key:          "release_consistency",
+				Value:        cv,
+				Unit:         "cv%",
+				DisplayValue: fmt.Sprintf("%.0f%%", cv),
+				Description:  "Release consistency (lower = more consistent)",
+			})
+		}
+
+		// Check for potential rollbacks (releases published close together)
+		potentialRollbacks := 0
+		for i := 0; i < len(recentReleases)-1; i++ {
+			timeBetween := recentReleases[i].CreatedAt.Sub(recentReleases[i+1].CreatedAt.Time).Hours()
+			// If released within 2 hours, might be a hotfix/rollback
+			if timeBetween < 2 {
+				potentialRollbacks++
+			}
+		}
+
+		if potentialRollbacks > 0 {
+			metrics = append(metrics, models.Metric{
+				Key:          "rapid_releases",
+				Value:        float64(potentialRollbacks),
+				Unit:         "count",
+				DisplayValue: fmt.Sprintf("%d", potentialRollbacks),
+				Description:  "Releases within 2h of previous (potential hotfixes)",
+			})
+		}
+	}
+
+	// Production readiness indicators
+	stableReleases := len(recentReleases) - preReleaseCount
+	if stableReleases > 0 {
+		metrics = append(metrics, models.Metric{
+			Key:          "stable_releases",
+			Value:        float64(stableReleases),
+			Unit:         "count",
+			DisplayValue: fmt.Sprintf("%d", stableReleases),
+			Description:  "Stable (non-prerelease) releases",
+		})
+	}
+
+	// Findings
 	if changelogRatio < 50 {
 		findings = append(findings, models.Finding{
 			Type:        "missing_changelogs",

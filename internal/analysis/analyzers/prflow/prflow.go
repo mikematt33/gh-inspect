@@ -115,6 +115,10 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		var reviewCount int
 		var totalApprovals int
 		var prsWithReviews int
+		uniqueReviewers := make(map[string]bool)
+		var totalComments int
+		var totalReviewers int
+		authorReviewerPairs := make(map[string]map[string]bool) // author -> set of reviewers
 
 		for i, pr := range samplePRs {
 			if i >= limitChecks {
@@ -132,12 +136,32 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 					reviewCount++
 				}
 
+				// Track unique reviewers and collaboration patterns
+				prAuthor := pr.User.GetLogin()
+				reviewersForThisPR := make(map[string]bool)
+
 				// Count approvals
 				for _, review := range reviews {
 					if review.GetState() == "APPROVED" {
 						totalApprovals++
 					}
+
+					// Track unique reviewers across all PRs
+					reviewer := review.User.GetLogin()
+					if reviewer != "" && reviewer != prAuthor {
+						uniqueReviewers[reviewer] = true
+						reviewersForThisPR[reviewer] = true
+
+						// Track cross-author collaboration
+						if authorReviewerPairs[prAuthor] == nil {
+							authorReviewerPairs[prAuthor] = make(map[string]bool)
+						}
+						authorReviewerPairs[prAuthor][reviewer] = true
+					}
 				}
+
+				totalReviewers += len(reviewersForThisPR)
+				totalComments += len(reviews)
 			}
 		}
 
@@ -163,6 +187,61 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 				Unit:         "count",
 				DisplayValue: fmt.Sprintf("%.1f", avgApprovals),
 				Description:  "Average number of approvals per PR",
+			})
+
+			// Collaboration Metrics
+			metrics = append(metrics, models.Metric{
+				Key:          "unique_reviewers",
+				Value:        float64(len(uniqueReviewers)),
+				Unit:         "count",
+				DisplayValue: fmt.Sprintf("%d", len(uniqueReviewers)),
+				Description:  "Number of unique code reviewers",
+			})
+
+			avgReviewersPerPR := float64(totalReviewers) / float64(prsWithReviews)
+			metrics = append(metrics, models.Metric{
+				Key:          "avg_reviewers_per_pr",
+				Value:        avgReviewersPerPR,
+				Unit:         "count",
+				DisplayValue: fmt.Sprintf("%.1f", avgReviewersPerPR),
+				Description:  "Average reviewers per PR",
+			})
+
+			// Calculate cross-author collaboration rate
+			totalCollaborations := 0
+			for _, reviewers := range authorReviewerPairs {
+				totalCollaborations += len(reviewers)
+			}
+			if len(authorReviewerPairs) > 0 {
+				avgCollaboration := float64(totalCollaborations) / float64(len(authorReviewerPairs))
+				metrics = append(metrics, models.Metric{
+					Key:          "cross_author_collaboration",
+					Value:        avgCollaboration,
+					Unit:         "reviewers/author",
+					DisplayValue: fmt.Sprintf("%.1f", avgCollaboration),
+					Description:  "Average reviewers per PR author",
+				})
+			}
+
+			// PR discussion depth
+			avgCommentsPerPR := float64(totalComments) / float64(prsWithReviews)
+			metrics = append(metrics, models.Metric{
+				Key:          "pr_discussion_depth",
+				Value:        avgCommentsPerPR,
+				Unit:         "comments",
+				DisplayValue: fmt.Sprintf("%.1f", avgCommentsPerPR),
+				Description:  "Average review comments per PR",
+			})
+
+			// Review participation rate (reviewers / total contributors)
+			// Note: This would need contributor data from activity analyzer for full accuracy
+			// For now, we'll report the unique reviewers as a proxy
+			metrics = append(metrics, models.Metric{
+				Key:          "review_participation",
+				Value:        float64(len(uniqueReviewers)),
+				Unit:         "count",
+				DisplayValue: fmt.Sprintf("%d active", len(uniqueReviewers)),
+				Description:  "Number of active code reviewers",
 			})
 		}
 	}
