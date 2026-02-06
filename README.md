@@ -285,7 +285,7 @@ gh-inspect cache clear --stats
 **Cache Details:**
 
 - **Location:** `~/.gh-inspect/cache`
-- **TTL:** 24 hours (automatically expires)
+- **TTL:** 1 hour (automatically expires)
 - **Scope:** Repository metadata and static data
 - **Benefits:** Reduces API calls by 30-50% on repeated runs
 
@@ -480,13 +480,13 @@ gh-inspect run owner/repo --exclude=releases,branches
 ```
 
 **Use Caching for Faster Repeated Runs**
-The cache automatically stores API responses for 24 hours.
+The cache automatically stores API responses for 1 hour.
 
 ```bash
 # First run (fetches from API)
 gh-inspect run owner/repo
 
-# Second run within 24 hours (uses cache - much faster!)
+# Second run within 1 hour (uses cache - much faster!)
 gh-inspect run owner/repo
 
 # Force fresh data (bypass cache)
@@ -920,7 +920,7 @@ For a **moderately active repository** (50-100 commits/week) with default 30d wi
 - **Standard** (`--depth=standard`): ~25-40 API calls per repository
 - **Deep** (`--depth=deep`): ~50-100 API calls per repository
 
-**With Caching:** Second runs within 24 hours use 30-50% fewer API calls.
+**With Caching:** Second runs within 1 hour use 30-50% fewer API calls.
 
 With authentication, you have 5,000 requests/hour, which allows analyzing:
 
