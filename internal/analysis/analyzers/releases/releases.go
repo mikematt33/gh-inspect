@@ -3,6 +3,7 @@ package releases
 import (
 	"context"
 	"fmt"
+	"math"
 	"regexp"
 	"time"
 
@@ -198,14 +199,14 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 			mean := sum / float64(len(intervals))
 
 			// Calculate standard deviation
-			var variance float64
+			var varianceSum float64
 			for _, interval := range intervals {
-				variance += (interval - mean) * (interval - mean)
+				varianceSum += (interval - mean) * (interval - mean)
 			}
 			stdDev := 0.0
 			if len(intervals) > 0 {
-				// Store variance as is (not sqrt which would make it stdDev)
-				stdDev = variance / float64(len(intervals))
+				variance := varianceSum / float64(len(intervals))
+				stdDev = math.Sqrt(variance)
 			}
 
 			// Coefficient of variation (CV) - lower is more consistent

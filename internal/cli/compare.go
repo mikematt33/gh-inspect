@@ -25,6 +25,11 @@ Minimum 2 repositories required. Supports --quiet and --verbose flags.`,
 			return fmt.Errorf("invalid format: %s (must be text, json, or markdown)", flagFormat)
 		}
 
+		// Validate output mode
+		if flagOutputMode != "" && flagOutputMode != "suggestive" && flagOutputMode != "observational" && flagOutputMode != "statistical" {
+			return fmt.Errorf("invalid output mode: %s (must be suggestive, observational, or statistical)", flagOutputMode)
+		}
+
 		if flagListAnalyzers {
 			return nil // Allow no args when listing analyzers
 		}

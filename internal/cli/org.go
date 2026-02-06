@@ -50,6 +50,11 @@ Displays a progress bar during analysis. Use --quiet for CI/CD environments.`,
 			return fmt.Errorf("invalid depth: %s (must be shallow, standard, or deep)", flagDepth)
 		}
 
+		// Validate output mode
+		if flagOutputMode != "" && flagOutputMode != "suggestive" && flagOutputMode != "observational" && flagOutputMode != "statistical" {
+			return fmt.Errorf("invalid output mode: %s (must be suggestive, observational, or statistical)", flagOutputMode)
+		}
+
 		if flagListAnalyzers {
 			return nil // Allow no args when listing analyzers
 		}
