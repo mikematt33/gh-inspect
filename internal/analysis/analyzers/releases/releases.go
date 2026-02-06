@@ -203,10 +203,9 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 			for _, interval := range intervals {
 				varianceSum += (interval - mean) * (interval - mean)
 			}
-			variance := 0.0
 			stdDev := 0.0
 			if len(intervals) > 0 {
-				variance = varianceSum / float64(len(intervals))
+				variance := varianceSum / float64(len(intervals))
 				stdDev = math.Sqrt(variance)
 			}
 
