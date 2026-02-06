@@ -293,8 +293,15 @@ func parseGoMod(content string) int {
 			inRequire = false
 			continue
 		}
-		if inRequire || strings.HasPrefix(line, "require ") {
+		if inRequire {
 			if line != "" && !strings.HasPrefix(line, "//") {
+				count++
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "require ") {
+			rest := strings.TrimSpace(strings.TrimPrefix(line, "require"))
+			if rest != "" && !strings.HasPrefix(rest, "//") {
 				count++
 			}
 		}

@@ -147,7 +147,10 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 					}
 
 					// Track unique reviewers across all PRs
-					reviewer := review.User.GetLogin()
+					var reviewer string
+					if review.User != nil {
+						reviewer = review.User.GetLogin()
+					}
 					if reviewer != "" && reviewer != prAuthor {
 						uniqueReviewers[reviewer] = true
 						reviewersForThisPR[reviewer] = true

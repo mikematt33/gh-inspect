@@ -54,6 +54,12 @@ Use --quiet to suppress progress output or --verbose for detailed information.`,
 			if flagDepth != "" && flagDepth != "shallow" && flagDepth != "standard" && flagDepth != "deep" {
 				return fmt.Errorf("invalid depth: %s (must be shallow, standard, or deep)", flagDepth)
 			}
+
+			// Validate output mode
+			if flagOutputMode != "" && flagOutputMode != "suggestive" && flagOutputMode != "observational" && flagOutputMode != "statistical" {
+				return fmt.Errorf("invalid output mode: %s (must be suggestive, observational, or statistical)", flagOutputMode)
+			}
+
 			if flagListAnalyzers {
 				return nil // Allow no args when listing analyzers
 			}
@@ -332,9 +338,9 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 		renderer = &report.TextRenderer{}
 	}
 
-	// Parse output mode
+	// Parse output mode from the already-resolved value (respects flag > config > default)
 	outputMode := models.OutputModeObservational // default
-	switch flagOutputMode {
+	switch resolvedOutputMode {
 	case "suggestive":
 		outputMode = models.OutputModeSuggestive
 	case "observational", "":

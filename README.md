@@ -306,14 +306,15 @@ gh-inspect run owner/repo [flags]
 - `-f, --format string`: Output format (text, json, markdown) (default "text").
 - `-s, --since string`: Lookback window (e.g. 30d, 24h) (default "30d").
 - `--explain`: Show detailed score breakdown and improvement tips.
+- `--output-mode string`: Control how findings are presented: suggestive, observational, or statistical (default "observational").
 - `--baseline string`: Path to baseline file to compare against.
 - `--save-baseline`: Save this run as the new baseline.
 - `--compare-last`: Compare with last saved baseline.
 - `--fail-on-regression`: Exit with error if regression detected.
 - `--fail-under int`: Exit with error code 1 if average health score is below this value.
 - `--no-cache`: Disable API response caching (forces fresh API calls).
-- `--include strings`: Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
-- `--exclude strings`: Exclude specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
+- `--include strings`: Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health,dependencies).
+- `--exclude strings`: Exclude specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health,dependencies).
 - `--list-analyzers`: List all available analyzers with descriptions and exit.
 
 **Global Flags:**

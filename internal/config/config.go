@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	yaml "gopkg.in/yaml.v3"
 )
@@ -80,14 +81,14 @@ type DependenciesConfig struct {
 func GetConfigPath() (string, error) {
 	// Respect XDG_CONFIG_HOME if set (useful for testing and Linux users)
 	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-		return xdgConfig + "/gh-inspect/config.yaml", nil
+		return filepath.Join(xdgConfig, "gh-inspect", "config.yaml"), nil
 	}
 
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return configDir + "/gh-inspect/config.yaml", nil
+	return filepath.Join(configDir, "gh-inspect", "config.yaml"), nil
 }
 
 func Load() (*Config, error) {
@@ -173,7 +174,7 @@ func Save(cfg *Config) error {
 	}
 
 	// Ensure the directory exists
-	configDir := configPath[:len(configPath)-len("/config.yaml")]
+	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("error creating config directory: %w", err)
 	}

@@ -47,18 +47,11 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		recentPRs = nil
 	}
 
-	// Filter PRs by time window - use MergedAt for merged PRs, UpdatedAt as fallback
+	// Filter PRs by time window - only include merged PRs for code quality metrics
 	var filteredPRs []*github.PullRequest
 	for _, pr := range recentPRs {
-		inWindow := false
+		// Only include PRs that were merged within the time window
 		if pr.MergedAt != nil && pr.MergedAt.After(cfg.Since) {
-			inWindow = true
-		} else if pr.ClosedAt != nil && pr.ClosedAt.After(cfg.Since) {
-			inWindow = true
-		} else if pr.UpdatedAt != nil && pr.UpdatedAt.After(cfg.Since) {
-			inWindow = true
-		}
-		if inWindow {
 			filteredPRs = append(filteredPRs, pr)
 		}
 	}
@@ -209,33 +202,32 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 
 		analyzedCount := 0
 		for _, pr := range filteredPRs {
-			if pr.MergedAt != nil {
-				mergedPRs = append(mergedPRs, pr)
+			// filteredPRs now only contains merged PRs, no need to check MergedAt
+			mergedPRs = append(mergedPRs, pr)
 
-				// Only analyze a sample to respect rate limits
-				if analyzedCount < sampleLimit {
-					// Fetch full PR details for accurate metrics
-					fullPR, err := client.GetPullRequest(ctx, repo.Owner, repo.Name, pr.GetNumber())
-					if err == nil {
-						// Get size data
-						if fullPR.Additions != nil && fullPR.Deletions != nil {
-							totalAdditions += *fullPR.Additions
-							totalDeletions += *fullPR.Deletions
-							prsWithSizeData++
-						}
-
-						// Check for reviews
-						reviews, err := client.GetReviews(ctx, repo.Owner, repo.Name, pr.GetNumber(), nil)
-						if err == nil {
-							if len(reviews) > 0 {
-								prsWithReviews++
-							} else {
-								prsWithoutReview++
-							}
-							totalReviewComments += len(reviews)
-						}
-						analyzedCount++
+			// Only analyze a sample to respect rate limits
+			if analyzedCount < sampleLimit {
+				// Fetch full PR details for accurate metrics
+				fullPR, err := client.GetPullRequest(ctx, repo.Owner, repo.Name, pr.GetNumber())
+				if err == nil {
+					// Get size data
+					if fullPR.Additions != nil && fullPR.Deletions != nil {
+						totalAdditions += *fullPR.Additions
+						totalDeletions += *fullPR.Deletions
+						prsWithSizeData++
 					}
+
+					// Check for reviews
+					reviews, err := client.GetReviews(ctx, repo.Owner, repo.Name, pr.GetNumber(), nil)
+					if err == nil {
+						if len(reviews) > 0 {
+							prsWithReviews++
+						} else {
+							prsWithoutReview++
+						}
+						totalReviewComments += len(reviews)
+					}
+					analyzedCount++
 				}
 			}
 		}
