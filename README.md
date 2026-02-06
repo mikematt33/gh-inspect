@@ -136,137 +136,6 @@ The `auth logout` command intelligently:
 - Removes tokens from config file and shell rc files automatically
 - Provides instructions for manual removal of environment variables and gh CLI tokens
 
-#### `run` - Analyze Repositories
-
-Analyze one or more repositories (format: owner/repo).
-
-```bash
-gh-inspect run owner/repo [flags]
-```
-
-**Flags:**
-
-- `--depth string`: Analysis depth: shallow, standard, or deep (default "standard").
-- `--max-prs int`: Maximum PRs to analyze (0 = use depth default).
-- `--max-issues int`: Maximum issues to fetch (0 = use depth default).
-- `--max-workflow-runs int`: Maximum CI runs to analyze (0 = use depth default).
-- `-f, --format string`: Output format (text, json, markdown) (default "text").
-- `-s, --since string`: Lookback window (e.g. 30d, 24h) (default "30d").
-- `--explain`: Show detailed score breakdown and improvement tips.
-- `--baseline string`: Path to baseline file to compare against.
-- `--save-baseline`: Save this run as the new baseline.
-- `--compare-last`: Compare with last saved baseline.
-- `--fail-on-regression`: Exit with error if regression detected.
-- `--fail-under int`: Exit with error code 1 if average health score is below this value.
-- `--no-cache`: Disable API response caching (forces fresh API calls).
-- `--include strings`: Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
-- `--exclude strings`: Exclude specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
-- `--list-analyzers`: List all available analyzers with descriptions and exit.
-
-**Global Flags:**
-
-- `-q, --quiet`: Suppress non-essential output (useful for CI/CD).
-- `-v, --verbose`: Enable verbose output with detailed progress information.
-
-**Progress Indicator:**
-
-During analysis, a clean progress bar shows:
-
-- Current progress: `Analyzing repositories (5/10)`
-- Automatically clears when complete for clean output
-- Can be suppressed with `--quiet` flag for CI/CD pipelines
-
-#### `org` - Organization Scan
-
-Scan all active repositories in a GitHub organization. Automatically skips archived repositories.
-
-```bash
-gh-inspect org organization [flags]
-```
-
-**Features:**
-
-- Analyzes all non-archived repositories in the organization
-- Provides aggregated organization-level summary including:
-  - Total repositories analyzed
-  - Average health score across all repos
-  - Average PR cycle time
-  - Average CI success rate
-  - **Average CI runtime** 🆕 - Mean build time across all repos
-  - Total commits, issues, and findings
-  - Repos at risk (health score < 50)
-  - Repos with bus factor of 1
-
-**Flags:**
-
-- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
-- **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
-
-**Filtering Examples:**
-
-```bash
-# Only analyze Go and Python repositories
-gh-inspect org my-org --filter-language=go,python
-
-# Filter by name pattern (regex)
-gh-inspect org my-org --filter-name="^api-.*"
-
-# Only production repositories updated in last 90 days
-gh-inspect org my-org --filter-topics=production --filter-updated=90d
-
-# Skip forked repositories
-gh-inspect org my-org --filter-skip-forks
-```
-
-#### `user` - User Scan
-
-Analyze all repositories belonging to a specific user.
-
-```bash
-gh-inspect user username [flags]
-```
-
-**Features:**
-
-- Analyzes all repositories owned by the user
-- Gracefully handles empty repositories (shows info message instead of error)
-- Provides same aggregated summary as organization scans
-
-**Flags:**
-
-- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
-- **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
-
-#### `compare` - Compare Repositories
-
-Compare metrics of multiple repositories side-by-side. Useful for benchmarking.
-
-```bash
-gh-inspect compare owner/repo1 owner/repo2 [flags]
-```
-
-**Flags:**
-
-- `--depth string`: Analysis depth.
-- `--max-prs int`, `--max-issues int`, `--max-workflow-runs int`: Resource limits.
-- `-f, --format string`: Output format (text, json, markdown).
-- `-s, --since string`: Lookback window.
-- `--explain`: Show score breakdown.
-- `--baseline string`, `--save-baseline`, `--compare-last`, `--fail-on-regression`: Baseline comparison.
-- `--list-analyzers`: List available analyzers.
-
-#### `update`
-
-Update `gh-inspect` to the latest version.
-
-```bash
-# Update to the latest version
-gh-inspect update
-
-# Check for updates without installing
-gh-inspect update --check
-```
-
 #### `cache` - Manage API Cache
 
 Manage the disk-based cache for GitHub API responses. The cache reduces API rate limit usage and speeds up repeated analyses.
@@ -297,13 +166,23 @@ Use `--no-cache` flag to bypass cache and force fresh API calls:
 gh-inspect run owner/repo --no-cache
 ```
 
-#### `uninstall`
+#### `compare` - Compare Repositories
 
-Uninstall the CLI from your system.
+Compare metrics of multiple repositories side-by-side. Useful for benchmarking.
 
 ```bash
-gh-inspect uninstall
+gh-inspect compare owner/repo1 owner/repo2 [flags]
 ```
+
+**Flags:**
+
+- `--depth string`: Analysis depth.
+- `--max-prs int`, `--max-issues int`, `--max-workflow-runs int`: Resource limits.
+- `-f, --format string`: Output format (text, json, markdown).
+- `-s, --since string`: Lookback window.
+- `--explain`: Show score breakdown.
+- `--baseline string`, `--save-baseline`, `--compare-last`, `--fail-on-regression`: Baseline comparison.
+- `--list-analyzers`: List available analyzers.
 
 #### `completion`
 
@@ -362,6 +241,127 @@ gh-inspect completion --auto
 #### `init` & `config`
 
 Initialize or manage configuration. See [Configuration](#-configuration) for details.
+
+#### `org` - Organization Scan
+
+Scan all active repositories in a GitHub organization. Automatically skips archived repositories.
+
+```bash
+gh-inspect org organization [flags]
+```
+
+**Features:**
+
+- Analyzes all non-archived repositories in the organization
+- Provides aggregated organization-level summary including:
+  - Total repositories analyzed
+  - Average health score across all repos
+  - Average PR cycle time
+  - Average CI success rate
+  - **Average CI runtime** 🆕 - Mean build time across all repos
+  - Total commits, issues, and findings
+  - Repos at risk (health score < 50)
+  - Repos with bus factor of 1
+
+**Flags:**
+
+- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
+- **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
+
+**Filtering Examples:**
+
+```bash
+# Only analyze Go and Python repositories
+gh-inspect org my-org --filter-language=go,python
+
+# Filter by name pattern (regex)
+gh-inspect org my-org --filter-name="^api-.*"
+
+# Only production repositories updated in last 90 days
+gh-inspect org my-org --filter-topics=production --filter-updated=90d
+
+# Skip forked repositories
+gh-inspect org my-org --filter-skip-forks
+```
+
+#### `run` - Analyze Repositories
+
+Analyze one or more repositories (format: owner/repo).
+
+```bash
+gh-inspect run owner/repo [flags]
+```
+
+**Flags:**
+
+- `--depth string`: Analysis depth: shallow, standard, or deep (default "standard").
+- `--max-prs int`: Maximum PRs to analyze (0 = use depth default).
+- `--max-issues int`: Maximum issues to fetch (0 = use depth default).
+- `--max-workflow-runs int`: Maximum CI runs to analyze (0 = use depth default).
+- `-f, --format string`: Output format (text, json, markdown) (default "text").
+- `-s, --since string`: Lookback window (e.g. 30d, 24h) (default "30d").
+- `--explain`: Show detailed score breakdown and improvement tips.
+- `--baseline string`: Path to baseline file to compare against.
+- `--save-baseline`: Save this run as the new baseline.
+- `--compare-last`: Compare with last saved baseline.
+- `--fail-on-regression`: Exit with error if regression detected.
+- `--fail-under int`: Exit with error code 1 if average health score is below this value.
+- `--no-cache`: Disable API response caching (forces fresh API calls).
+- `--include strings`: Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
+- `--exclude strings`: Exclude specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health).
+- `--list-analyzers`: List all available analyzers with descriptions and exit.
+
+**Global Flags:**
+
+- `-q, --quiet`: Suppress non-essential output (useful for CI/CD).
+- `-v, --verbose`: Enable verbose output with detailed progress information.
+
+**Progress Indicator:**
+
+During analysis, a clean progress bar shows:
+
+- Current progress: `Analyzing repositories (5/10)`
+- Automatically clears when complete for clean output
+- Can be suppressed with `--quiet` flag for CI/CD pipelines
+
+#### `uninstall`
+
+Uninstall the CLI from your system.
+
+```bash
+gh-inspect uninstall
+```
+
+#### `update`
+
+Update `gh-inspect` to the latest version.
+
+```bash
+# Update to the latest version
+gh-inspect update
+
+# Check for updates without installing
+gh-inspect update --check
+```
+
+#### `user` - User Scan
+
+Analyze all repositories belonging to a specific user.
+
+```bash
+gh-inspect user username [flags]
+```
+
+**Features:**
+
+- Analyzes all repositories owned by the user
+- Gracefully handles empty repositories (shows info message instead of error)
+- Provides same aggregated summary as organization scans
+
+**Flags:**
+
+- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
+- **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
 
 ### Examples
 
