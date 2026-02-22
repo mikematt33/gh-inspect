@@ -1,3 +1,5 @@
+<img src="logo.svg" alt="gh-inspect logo" width="500">
+
 # gh-inspect
 
 **gh-inspect** is an opinionated, deep-inspection CLI tool designed to measure the engineering health of GitHub repositories. It goes beyond simple metrics, analyzing commit patterns, PR velocity, issue hygiene, and CI stability to provide a comprehensive "Health Score" for your project.
