@@ -149,7 +149,7 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	if token == "" {
 		return nil, fmt.Errorf("no GitHub token found. Please run 'gh-inspect auth' to login")
 	}
-	client := ghclient.NewClientWithCache(token, !flagNoCache)
+	client := ghclient.NewClient(token)
 
 	// Pre-flight check for rate limits
 	limits, err := client.GetRateLimit(context.Background())

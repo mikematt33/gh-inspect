@@ -40,7 +40,6 @@ Use --quiet to suppress progress output or --verbose for detailed information.`,
   gh-inspect run owner/repo --format=json > report.json
   gh-inspect run owner/repo --format=markdown --explain
   gh-inspect run owner/repo --quiet --fail-under=80
-  gh-inspect run owner/repo --no-cache
   gh-inspect run owner/repo --include=activity,ci,security
   gh-inspect run owner/repo --exclude=branches,releases
   gh-inspect run owner/repo --depth=shallow --max-prs=25
@@ -98,7 +97,6 @@ var (
 	flagBaseline         string
 	flagSaveBaseline     bool
 	flagExplain          bool
-	flagNoCache          bool
 	flagOutputMode       string
 	// Filtering flags
 	flagFilterName      string
@@ -180,7 +178,6 @@ func registerAnalysisFlags(cmd *cobra.Command) {
 	})
 
 	// Caching
-	cmd.Flags().BoolVar(&flagNoCache, "no-cache", false, "Disable API response caching (forces fresh API calls)")
 }
 
 // registerFilterFlags adds repository filtering flags (for org and user commands)

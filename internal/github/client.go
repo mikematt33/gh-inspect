@@ -1,17 +1,15 @@
 package github
 
 import (
-	"context"
-	"fmt"
-	"os"
-	"os/exec"
-	"strings"
-	"sync"
-	"time"
+"context"
+"fmt"
+"os"
+"os/exec"
+"strings"
+"time"
 
-	"github.com/google/go-github/v60/github"
-	"github.com/mikematt33/gh-inspect/internal/analysis"
-	"github.com/mikematt33/gh-inspect/internal/cache"
+"github.com/google/go-github/v60/github"
+"github.com/mikematt33/gh-inspect/internal/analysis"
 )
 
 // Ensure ClientWrapper satisfies the interface
@@ -19,11 +17,7 @@ var _ analysis.Client = (*ClientWrapper)(nil)
 
 // ClientWrapper adapts the google/go-github client to the analysis.Client interface.
 type ClientWrapper struct {
-	client    *github.Client
-	repoCache map[string]*github.Repository
-	cacheMu   sync.RWMutex
-	diskCache *cache.Cache
-	useCache  bool
+client *github.Client
 }
 
 // ResolveToken attempts to find a GitHub token from:
@@ -31,56 +25,36 @@ type ClientWrapper struct {
 // 2. "gh auth token" command
 // 3. GITHUB_TOKEN environment variable
 func ResolveToken(configToken string) string {
-	if configToken != "" {
-		return configToken
-	}
+if configToken != "" {
+return configToken
+}
 
-	// 2. Try gh CLI
-	cmd := exec.Command("gh", "auth", "token")
-	out, err := cmd.Output()
-	if err == nil {
-		token := strings.TrimSpace(string(out))
-		if token != "" {
-			return token
-		}
-	}
+// 2. Try gh CLI
+cmd := exec.Command("gh", "auth", "token")
+out, err := cmd.Output()
+if err == nil {
+token := strings.TrimSpace(string(out))
+if token != "" {
+return token
+}
+}
 
-	// 2. Try Env var
-	return os.Getenv("GITHUB_TOKEN")
+// 2. Try Env var
+return os.Getenv("GITHUB_TOKEN")
 }
 
 // NewClient creates a new GitHub client wrapper.
 func NewClient(token string) *ClientWrapper {
-	return NewClientWithCache(token, true)
+var ghClient *github.Client
+if token == "" {
+ghClient = github.NewClient(nil)
+} else {
+ghClient = github.NewClient(nil).WithAuthToken(token)
 }
 
-// NewClientWithCache creates a new GitHub client wrapper with cache control.
-func NewClientWithCache(token string, useCache bool) *ClientWrapper {
-	var ghClient *github.Client
-	if token == "" {
-		ghClient = github.NewClient(nil)
-	} else {
-		ghClient = github.NewClient(nil).WithAuthToken(token)
-	}
-
-	wrapper := &ClientWrapper{
-		client:    ghClient,
-		repoCache: make(map[string]*github.Repository),
-		useCache:  useCache,
-	}
-
-	// Initialize disk cache if enabled
-	if useCache {
-		cachePath, err := cache.GetDefaultCachePath()
-		if err == nil {
-			c, err := cache.New(cachePath, time.Hour)
-			if err == nil {
-				wrapper.diskCache = c
-			}
-		}
-	}
-
-	return wrapper
+return &ClientWrapper{
+client: ghClient,
+}
 }
 
 // checkRateLimit inspects the response for rate limit headers
@@ -205,45 +179,12 @@ func (c *ClientWrapper) ListCommitsSince(ctx context.Context, owner, repo string
 }
 
 func (c *ClientWrapper) GetRepository(ctx context.Context, owner, repo string) (*github.Repository, error) {
-	cacheKey := fmt.Sprintf("repo:%s/%s", owner, repo)
-
-	// Check in-memory cache first
-	c.cacheMu.RLock()
-	if cached, ok := c.repoCache[cacheKey]; ok {
-		c.cacheMu.RUnlock()
-		return cached, nil
-	}
-	c.cacheMu.RUnlock()
-
-	// Check disk cache if enabled
-	if c.diskCache != nil {
-		var cached github.Repository
-		if found, err := c.diskCache.Get(cacheKey, &cached); err == nil && found {
-			// Store in memory cache too
-			c.cacheMu.Lock()
-			c.repoCache[cacheKey] = &cached
-			c.cacheMu.Unlock()
-			return &cached, nil
-		}
-	}
-
-	// Fetch from API
-	r, _, err := c.client.Repositories.Get(ctx, owner, repo)
-	if err != nil {
-		return nil, err
-	}
-
-	// Store in memory cache
-	c.cacheMu.Lock()
-	c.repoCache[cacheKey] = r
-	c.cacheMu.Unlock()
-
-	// Store in disk cache if enabled
-	if c.diskCache != nil {
-		_ = c.diskCache.Set(cacheKey, r)
-	}
-
-	return r, nil
+// Fetch from API
+r, _, err := c.client.Repositories.Get(ctx, owner, repo)
+if err != nil {
+return nil, err
+}
+return r, nil
 }
 
 func (c *ClientWrapper) GetContent(ctx context.Context, owner, repo, path string) (*github.RepositoryContent, []*github.RepositoryContent, error) {

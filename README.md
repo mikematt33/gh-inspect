@@ -26,7 +26,6 @@
 - **Recommendations Engine**: Get actionable suggestions with explanations for every finding.
 - **GitHub Actions Integration**: Markdown output optimized for PR comments and Actions summaries.
 - **Repository Filtering**: Filter org/user scans by name, language, topics, and update date.
-- **Disk-based Caching**: Intelligent 24-hour cache reduces API calls by 30-50%.
 - **CI/CD Gates**: Use `--fail-under` to block merges if repository health drops below a certain threshold.
 
 ## 🛠️ Installation
@@ -143,36 +142,6 @@ The `auth logout` command intelligently:
 - Removes tokens from config file and shell rc files automatically
 - Provides instructions for manual removal of environment variables and gh CLI tokens
 
-#### `cache` - Manage API Cache
-
-Manage the disk-based cache for GitHub API responses. The cache reduces API rate limit usage and speeds up repeated analyses.
-
-```bash
-# Show cache statistics
-gh-inspect cache stats
-
-# Clear all cached data
-gh-inspect cache clear
-
-# Show stats before clearing
-gh-inspect cache clear --stats
-```
-
-**Cache Details:**
-
-- **Location:** `~/.gh-inspect/cache`
-- **TTL:** 1 hour (automatically expires)
-- **Scope:** Repository metadata and static data
-- **Benefits:** Reduces API calls by 30-50% on repeated runs
-
-**Disable Cache:**
-
-Use `--no-cache` flag to bypass cache and force fresh API calls:
-
-```bash
-gh-inspect run owner/repo --no-cache
-```
-
 #### `compare` - Compare Repositories
 
 Compare metrics of multiple repositories side-by-side. Useful for benchmarking.
@@ -272,7 +241,7 @@ gh-inspect org organization [flags]
 
 **Flags:**
 
-- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
+- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--include`, `--exclude`).
 - **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
 
 **Filtering Examples:**
@@ -314,7 +283,6 @@ gh-inspect run owner/repo [flags]
 - `--compare-last`: Compare with last saved baseline.
 - `--fail-on-regression`: Exit with error if regression detected.
 - `--fail-under int`: Exit with error code 1 if average health score is below this value.
-- `--no-cache`: Disable API response caching (forces fresh API calls).
 - `--include strings`: Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health,dependencies).
 - `--exclude strings`: Exclude specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health,dependencies).
 - `--list-analyzers`: List all available analyzers with descriptions and exit.
@@ -368,7 +336,7 @@ gh-inspect user username [flags]
 
 **Flags:**
 
-- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
+- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--include`, `--exclude`).
 - **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
 
 ### Examples
@@ -503,28 +471,6 @@ Skip analyzers you don't need to save API rate limits and time.
 # Skip releases and branches analysis
 gh-inspect run owner/repo --exclude=releases,branches
 ```
-
-**Use Caching for Faster Repeated Runs**
-The cache automatically stores API responses for 1 hour.
-
-```bash
-# First run (fetches from API)
-gh-inspect run owner/repo
-
-# Second run within 1 hour (uses cache - much faster!)
-gh-inspect run owner/repo
-
-# Force fresh data (bypass cache)
-gh-inspect run owner/repo --no-cache
-
-# View cache stats
-gh-inspect cache stats
-
-# Clear cache manually
-gh-inspect cache clear
-```
-
-**Repository Filtering (Org/User Commands)**
 Filter which repositories to analyze based on multiple criteria.
 
 ```bash
@@ -990,19 +936,6 @@ gh-inspect run owner/repo --depth=deep --max-workflow-runs=200
 ```
 
 **Disk-Based Caching:**
-
-- 24-hour TTL reduces API calls by 30-50% on repeated runs
-- Automatic cache invalidation after expiration
-- Stores repository metadata and static data
-- Location: `~/.gh-inspect/cache`
-- Bypass with `--no-cache` flag
-
-**Repository Data Caching:**
-
-- Repository metadata is cached in-memory per session
-- Reduces duplicate API calls when multiple analyzers need the same data
-- Saves 2-3 API calls per repository analyzed
-
 **Time-Windowed Queries:**
 
 - Only fetches data within the specified analysis period (default: 30 days)
