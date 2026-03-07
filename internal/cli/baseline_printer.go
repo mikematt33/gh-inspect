@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/mikematt33/gh-inspect/pkg/baseline"
-	"github.com/mikematt33/gh-inspect/pkg/util"
 )
 
 // printComparison prints a comparison result in a human-readable format
@@ -88,7 +87,7 @@ func showTopChanges(comp *baseline.ComparisonResult) {
 	// Show top improvements
 	if len(improvements) > 0 {
 		fmt.Println(colorGreen + "Top Improvements:" + colorReset)
-		count := util.Min(5, len(improvements))
+		count := min(5, len(improvements))
 		for i := 0; i < count; i++ {
 			change := improvements[i]
 			fmt.Printf("  • %s: %.2f → %.2f (%.1f%%)\n",
@@ -100,7 +99,7 @@ func showTopChanges(comp *baseline.ComparisonResult) {
 	// Show top degradations
 	if len(degradations) > 0 {
 		fmt.Println(colorRed + "Top Degradations:" + colorReset)
-		count := util.Min(5, len(degradations))
+		count := min(5, len(degradations))
 		for i := 0; i < count; i++ {
 			change := degradations[i]
 			fmt.Printf("  • %s: %.2f → %.2f (%.1f%%)\n",

@@ -3,6 +3,7 @@ package report
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"io"
 	"text/tabwriter"
 	"time"
@@ -218,4 +219,15 @@ func (r *TextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opt
 	_, _ = fmt.Fprintln(w, "--------------------------------------------------")
 
 	return nil
+}
+
+
+func PrintJSONLines(report *models.Report) error {
+encoder := json.NewEncoder(os.Stdout)
+for _, repo := range report.Repositories {
+if err := encoder.Encode(repo); err != nil {
+return err
+}
+}
+return nil
 }

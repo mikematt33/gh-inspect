@@ -1,15 +1,16 @@
 package github
 
 import (
-"context"
-"fmt"
-"os"
-"os/exec"
-"strings"
-"time"
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+	"sync/atomic"
+	"time"
 
-"github.com/google/go-github/v60/github"
-"github.com/mikematt33/gh-inspect/internal/analysis"
+	"github.com/google/go-github/v60/github"
+	"github.com/mikematt33/gh-inspect/internal/analysis"
 )
 
 // Ensure ClientWrapper satisfies the interface
@@ -17,44 +18,71 @@ var _ analysis.Client = (*ClientWrapper)(nil)
 
 // ClientWrapper adapts the google/go-github client to the analysis.Client interface.
 type ClientWrapper struct {
-client *github.Client
+	clients []*github.Client
+	idx     uint32
+}
+
+func (c *ClientWrapper) GetUnderlyingClient() *github.Client {
+	if len(c.clients) == 0 {
+		return nil
+	}
+	i := atomic.AddUint32(&c.idx, 1)
+	return c.clients[i%uint32(len(c.clients))]
 }
 
 // ResolveToken attempts to find a GitHub token from:
 // 1. Config file (if passed)
 // 2. "gh auth token" command
 // 3. GITHUB_TOKEN environment variable
-func ResolveToken(configToken string) string {
-if configToken != "" {
-return configToken
-}
+func ResolveTokens(configToken string) []string {
+	var tokens []string
+	if configToken != "" {
+		tokens = append(tokens, strings.Split(configToken, ",")...)
+		return tokens
+	}
 
-// 2. Try gh CLI
-cmd := exec.Command("gh", "auth", "token")
-out, err := cmd.Output()
-if err == nil {
-token := strings.TrimSpace(string(out))
-if token != "" {
-return token
-}
-}
+	if envTokens := os.Getenv("GITHUB_TOKENS"); envTokens != "" {
+		return strings.Split(envTokens, ",")
+	}
 
-// 2. Try Env var
-return os.Getenv("GITHUB_TOKEN")
+	if envToken := os.Getenv("GITHUB_TOKEN"); envToken != "" {
+		return []string{envToken}
+	}
+
+	// Try gh CLI
+	cmd := exec.Command("gh", "auth", "token")
+	out, err := cmd.Output()
+	if err == nil {
+		token := strings.TrimSpace(string(out))
+		if token != "" {
+			return []string{token}
+		}
+	}
+
+	return []string{}
 }
 
 // NewClient creates a new GitHub client wrapper.
-func NewClient(token string) *ClientWrapper {
-var ghClient *github.Client
-if token == "" {
-ghClient = github.NewClient(nil)
-} else {
-ghClient = github.NewClient(nil).WithAuthToken(token)
-}
+func NewClient(tokens []string) *ClientWrapper {
+	var clients []*github.Client
+	if len(tokens) == 0 {
+		clients = append(clients, github.NewClient(nil))
+	} else {
+		for _, token := range tokens {
+			t := strings.TrimSpace(token)
+			if t != "" {
+				clients = append(clients, github.NewClient(nil).WithAuthToken(t))
+			}
+		}
+	}
 
-return &ClientWrapper{
-client: ghClient,
-}
+	if len(clients) == 0 {
+		clients = append(clients, github.NewClient(nil))
+	}
+
+	return &ClientWrapper{
+		clients: clients,
+	}
 }
 
 // checkRateLimit inspects the response for rate limit headers
@@ -82,7 +110,7 @@ func (c *ClientWrapper) checkRateLimit(resp *github.Response) {
 
 // GetRateLimit returns the current rate limit status
 func (c *ClientWrapper) GetRateLimit(ctx context.Context) (*github.Rate, error) {
-	rates, _, err := c.client.RateLimit.Get(ctx)
+	rates, _, err := c.GetUnderlyingClient().RateLimit.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +139,7 @@ func (c *ClientWrapper) ListUserRepositories(ctx context.Context, user string, o
 	}
 
 	for {
-		repos, resp, err := c.client.Repositories.ListByAuthenticatedUser(ctx, currentOpts)
+		repos, resp, err := c.GetUnderlyingClient().Repositories.ListByAuthenticatedUser(ctx, currentOpts)
 		if err != nil {
 			return nil, err
 		}
@@ -126,15 +154,10 @@ func (c *ClientWrapper) ListUserRepositories(ctx context.Context, user string, o
 	return allRepos, nil
 }
 
-// GetUnderlyingClient returns the raw GitHub client for advanced operations
-func (c *ClientWrapper) GetUnderlyingClient() *github.Client {
-	return c.client
-}
-
 // GetPullRequests implements analysis.Client.
 // Returns a single page of pull requests - callers should handle pagination if needed
 func (c *ClientWrapper) GetPullRequests(ctx context.Context, owner, repo string, opts *github.PullRequestListOptions) ([]*github.PullRequest, error) {
-	prs, resp, err := c.client.PullRequests.List(ctx, owner, repo, opts)
+	prs, resp, err := c.GetUnderlyingClient().PullRequests.List(ctx, owner, repo, opts)
 	if resp != nil {
 		c.checkRateLimit(resp)
 	}
@@ -143,7 +166,7 @@ func (c *ClientWrapper) GetPullRequests(ctx context.Context, owner, repo string,
 
 // GetReviews implements analysis.Client.
 func (c *ClientWrapper) GetReviews(ctx context.Context, owner, repo string, number int, opts *github.ListOptions) ([]*github.PullRequestReview, error) {
-	reviews, resp, err := c.client.PullRequests.ListReviews(ctx, owner, repo, number, opts)
+	reviews, resp, err := c.GetUnderlyingClient().PullRequests.ListReviews(ctx, owner, repo, number, opts)
 	if resp != nil {
 		c.checkRateLimit(resp)
 	}
@@ -159,7 +182,7 @@ func (c *ClientWrapper) ListCommitsSince(ctx context.Context, owner, repo string
 	}
 
 	for {
-		commits, resp, err := c.client.Repositories.ListCommits(ctx, owner, repo, opts)
+		commits, resp, err := c.GetUnderlyingClient().Repositories.ListCommits(ctx, owner, repo, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -179,26 +202,26 @@ func (c *ClientWrapper) ListCommitsSince(ctx context.Context, owner, repo string
 }
 
 func (c *ClientWrapper) GetRepository(ctx context.Context, owner, repo string) (*github.Repository, error) {
-// Fetch from API
-r, _, err := c.client.Repositories.Get(ctx, owner, repo)
-if err != nil {
-return nil, err
-}
-return r, nil
+	// Fetch from API
+	r, _, err := c.GetUnderlyingClient().Repositories.Get(ctx, owner, repo)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 func (c *ClientWrapper) GetContent(ctx context.Context, owner, repo, path string) (*github.RepositoryContent, []*github.RepositoryContent, error) {
-	fileContent, dirContent, _, err := c.client.Repositories.GetContents(ctx, owner, repo, path, nil)
+	fileContent, dirContent, _, err := c.GetUnderlyingClient().Repositories.GetContents(ctx, owner, repo, path, nil)
 	return fileContent, dirContent, err
 }
 
 func (c *ClientWrapper) GetCombinedStatus(ctx context.Context, owner, repo, ref string) (*github.CombinedStatus, error) {
-	s, _, err := c.client.Repositories.GetCombinedStatus(ctx, owner, repo, ref, nil)
+	s, _, err := c.GetUnderlyingClient().Repositories.GetCombinedStatus(ctx, owner, repo, ref, nil)
 	return s, err
 }
 
 func (c *ClientWrapper) GetPullRequest(ctx context.Context, owner, repo string, number int) (*github.PullRequest, error) {
-	pr, resp, err := c.client.PullRequests.Get(ctx, owner, repo, number)
+	pr, resp, err := c.GetUnderlyingClient().PullRequests.Get(ctx, owner, repo, number)
 	if resp != nil {
 		c.checkRateLimit(resp)
 	}
@@ -220,7 +243,7 @@ func (c *ClientWrapper) GetIssues(ctx context.Context, owner, repo string, opts 
 	pageCount := 0
 
 	for {
-		issues, resp, err := c.client.Issues.ListByRepo(ctx, owner, repo, opts)
+		issues, resp, err := c.GetUnderlyingClient().Issues.ListByRepo(ctx, owner, repo, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -256,7 +279,7 @@ func (c *ClientWrapper) GetIssueComments(ctx context.Context, owner, repo string
 	pageCount := 0
 
 	for {
-		comments, resp, err := c.client.Issues.ListComments(ctx, owner, repo, number, opts)
+		comments, resp, err := c.GetUnderlyingClient().Issues.ListComments(ctx, owner, repo, number, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -274,7 +297,7 @@ func (c *ClientWrapper) GetIssueComments(ctx context.Context, owner, repo string
 
 // GetWorkflowRuns implements analysis.Client.
 func (c *ClientWrapper) GetWorkflowRuns(ctx context.Context, owner, repo string, opts *github.ListWorkflowRunsOptions) (*github.WorkflowRuns, *github.Response, error) {
-	runs, resp, err := c.client.Actions.ListRepositoryWorkflowRuns(ctx, owner, repo, opts)
+	runs, resp, err := c.GetUnderlyingClient().Actions.ListRepositoryWorkflowRuns(ctx, owner, repo, opts)
 	if resp != nil {
 		c.checkRateLimit(resp)
 	}
@@ -297,7 +320,7 @@ func (c *ClientWrapper) ListRepositories(ctx context.Context, org string, opts *
 	// Let's implement it as a simple pass-through for now to fit the pattern,
 	// but usually we want all of them.
 
-	repos, resp, err := c.client.Repositories.ListByOrg(ctx, org, opts)
+	repos, resp, err := c.GetUnderlyingClient().Repositories.ListByOrg(ctx, org, opts)
 	if resp != nil {
 		c.checkRateLimit(resp)
 	}
@@ -327,7 +350,7 @@ func (c *ClientWrapper) ListRepositories(ctx context.Context, org string, opts *
 				nextOpts.Type = opts.Type
 			}
 
-			repos, nextResp, err := c.client.Repositories.ListByOrg(ctx, org, nextOpts)
+			repos, nextResp, err := c.GetUnderlyingClient().Repositories.ListByOrg(ctx, org, nextOpts)
 			if err != nil {
 				return nil, err
 			}
@@ -342,7 +365,7 @@ func (c *ClientWrapper) ListRepositories(ctx context.Context, org string, opts *
 
 // GetTree gets a git tree (efficient for checking multiple files)
 func (c *ClientWrapper) GetTree(ctx context.Context, owner, repo, sha string, recursive bool) (*github.Tree, error) {
-	tree, _, err := c.client.Git.GetTree(ctx, owner, repo, sha, recursive)
+	tree, _, err := c.GetUnderlyingClient().Git.GetTree(ctx, owner, repo, sha, recursive)
 	return tree, err
 }
 

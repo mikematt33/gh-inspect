@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/mikematt33/gh-inspect/pkg/models"
-	"github.com/mikematt33/gh-inspect/pkg/util"
 )
 
 // Baseline stores a historical report for comparison
@@ -189,9 +188,9 @@ func compareRepository(current, previous *models.RepoResult) RepositoryDelta {
 	prevFindings := countFindings(previous)
 
 	delta.FindingDiff = FindingChange{
-		Added:     util.Max(0, currFindings-prevFindings),
-		Removed:   util.Max(0, prevFindings-currFindings),
-		Unchanged: util.Min(currFindings, prevFindings),
+		Added:     max(0, currFindings-prevFindings),
+		Removed:   max(0, prevFindings-currFindings),
+		Unchanged: min(currFindings, prevFindings),
 	}
 
 	return delta

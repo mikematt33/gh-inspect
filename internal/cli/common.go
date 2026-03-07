@@ -30,11 +30,11 @@ import (
 // It attempts to resolve the token from configuration, environment, or gh CLI.
 // Returns an error if no valid token is found.
 func getClientWithToken(cfg *config.Config) (*ghclient.ClientWrapper, error) {
-	token := ghclient.ResolveToken(cfg.Global.GitHubToken)
-	if token == "" {
+	tokens := ghclient.ResolveTokens(cfg.Global.GitHubToken)
+	if len(tokens) == 0 {
 		return nil, fmt.Errorf("no GitHub token found. Please run 'gh-inspect auth' to login")
 	}
-	return ghclient.NewClient(token), nil
+	return ghclient.NewClient(tokens), nil
 }
 
 // AnalysisOptions contains the configuration for running repository analysis.
@@ -145,11 +145,11 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	}
 
 	// 3. Setup Dependencies
-	token := ghclient.ResolveToken(cfg.Global.GitHubToken)
-	if token == "" {
+	tokens := ghclient.ResolveTokens(cfg.Global.GitHubToken)
+	if len(tokens) == 0 {
 		return nil, fmt.Errorf("no GitHub token found. Please run 'gh-inspect auth' to login")
 	}
-	client := ghclient.NewClient(token)
+	client := ghclient.NewClient(tokens)
 
 	// Pre-flight check for rate limits
 	limits, err := client.GetRateLimit(context.Background())

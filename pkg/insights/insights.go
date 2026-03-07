@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/mikematt33/gh-inspect/pkg/models"
-	"github.com/mikematt33/gh-inspect/pkg/util"
 )
 
 type InsightLevel string
@@ -388,7 +387,7 @@ func ExplainScore(repo models.RepoResult, outputMode models.OutputMode) []ScoreC
 			"Add missing documentation files to improve project health.",
 		)
 		if len(missingFileNames) > 0 && outputMode != models.OutputModeStatistical {
-			tips += fmt.Sprintf(" Missing: %v", missingFileNames[:util.Min(3, len(missingFileNames))])
+			tips += fmt.Sprintf(" Missing: %v", missingFileNames[:min(3, len(missingFileNames))])
 		}
 
 		components = append(components, ScoreComponent{
