@@ -98,7 +98,6 @@ var (
 	flagSaveBaseline     bool
 	flagExplain          bool
 	flagOutputMode       string
-	flagMinSeverity        string
 	// Filtering flags
 	flagFilterName      string
 	flagFilterLanguage  []string
