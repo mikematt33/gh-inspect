@@ -209,12 +209,17 @@ func (r *MarkdownRenderer) renderScoreBreakdown(repo models.RepoResult, engScore
 	_, _ = fmt.Fprintln(w, "<details>")
 	_, _ = fmt.Fprintln(w, "<summary><b>📊 Score Breakdown</b></summary>")
 	_, _ = fmt.Fprintln(w, "")
-	_, _ = fmt.Fprintln(w, "| Component | Current | Target | Impact | Tips |")
-	_, _ = fmt.Fprintln(w, "|-----------|---------|--------|--------|------|")
+	_, _ = fmt.Fprintln(w, "| Component | Score | Current | Target | Impact | Tips |")
+	_, _ = fmt.Fprintln(w, "|-----------|-------|---------|--------|--------|------|")
 
 	totalImpact := 0
 	for _, comp := range scoreComponents {
 		totalImpact += comp.Impact
+
+		earned := comp.MaxWeight - comp.Impact
+		if earned < 0 {
+			earned = 0
+		}
 
 		impactStr := "✓ OK"
 		if comp.Impact > 0 {
@@ -226,8 +231,9 @@ func (r *MarkdownRenderer) renderScoreBreakdown(repo models.RepoResult, engScore
 			tips = "-"
 		}
 
-		_, _ = fmt.Fprintf(w, "| %s | %s | %s | %s | %s |\n",
+		_, _ = fmt.Fprintf(w, "| %s | %d/%d | %s | %s | %s | %s |\n",
 			comp.Category,
+			earned, comp.MaxWeight,
 			comp.Current,
 			comp.Target,
 			impactStr,

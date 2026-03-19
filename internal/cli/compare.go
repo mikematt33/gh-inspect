@@ -45,20 +45,13 @@ Minimum 2 repositories required. Supports --quiet and --verbose flags.`,
 }
 
 func runComparison(cmd *cobra.Command, args []string) {
-	// Load config to get output mode preference
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Printf("Error loading config: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Resolve output mode: flag overrides config, config overrides default
-	resolvedOutputMode := "observational" // default
-	if flagOutputMode != "" {
-		resolvedOutputMode = flagOutputMode
-	} else if cfg.Global.OutputMode != "" {
-		resolvedOutputMode = cfg.Global.OutputMode
-	}
+	outputMode := resolveOutputMode(cfg)
 
 	opts := AnalysisOptions{
 		Repos:           args,
@@ -69,7 +62,7 @@ func runComparison(cmd *cobra.Command, args []string) {
 		MaxWorkflowRuns: flagMaxWorkflowRuns,
 		Include:         flagInclude,
 		Exclude:         flagExclude,
-		OutputMode:      resolvedOutputMode,
+		OutputMode:      string(outputMode),
 	}
 
 	fullReport, err := pipelineRunner(opts)

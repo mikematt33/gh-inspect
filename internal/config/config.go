@@ -165,30 +165,3 @@ func Load() (*Config, error) {
 
 	return cfg, nil
 }
-
-// Save writes the configuration to the user's config file
-func Save(cfg *Config) error {
-	configPath, err := GetConfigPath()
-	if err != nil {
-		return fmt.Errorf("error getting config path: %w", err)
-	}
-
-	// Ensure the directory exists
-	configDir := filepath.Dir(configPath)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return fmt.Errorf("error creating config directory: %w", err)
-	}
-
-	// Marshal the config to YAML
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("error marshaling config: %w", err)
-	}
-
-	// Write to file
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
-		return fmt.Errorf("error writing config file: %w", err)
-	}
-
-	return nil
-}

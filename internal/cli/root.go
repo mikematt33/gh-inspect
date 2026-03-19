@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/mikematt33/gh-inspect/internal/config"
 	"github.com/mikematt33/gh-inspect/internal/report"
@@ -98,6 +99,8 @@ var (
 	flagSaveBaseline     bool
 	flagExplain          bool
 	flagOutputMode       string
+	flagSummary          bool
+	flagOutputFile       string
 	// Filtering flags
 	flagFilterName      string
 	flagFilterLanguage  []string
@@ -177,6 +180,12 @@ func registerAnalysisFlags(cmd *cobra.Command) {
 		return []string{"suggestive", "observational", "statistical"}, cobra.ShellCompDirectiveNoFileComp
 	})
 
+	// Summary mode
+	cmd.Flags().BoolVar(&flagSummary, "summary", false, "Compact output: score + high/medium findings only")
+
+	// Output file (write to file while still printing to terminal)
+	cmd.Flags().StringVar(&flagOutputFile, "output-file", "", "Write report to file (e.g. report.json) while still printing to terminal")
+
 	// Caching
 }
 
@@ -245,6 +254,23 @@ func init() {
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(compareCmd)
 	registerAnalysisFlags(runCmd)
+	registerAnalysisFlags(compareCmd)
+}
+
+// resolveOutputMode resolves the effective output mode from the flag, config, and default.
+func resolveOutputMode(cfg *config.Config) models.OutputMode {
+	mode := flagOutputMode
+	if mode == "" {
+		mode = cfg.Global.OutputMode
+	}
+	switch mode {
+	case "suggestive":
+		return models.OutputModeSuggestive
+	case "statistical":
+		return models.OutputModeStatistical
+	default:
+		return models.OutputModeObservational
+	}
 }
 
 func runAnalysis(cmd *cobra.Command, args []string) {
@@ -260,15 +286,8 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Resolve output mode: flag overrides config, config overrides default
-	resolvedOutputMode := "observational" // default
-	if flagOutputMode != "" {
-		// Flag explicitly set - use it (override config)
-		resolvedOutputMode = flagOutputMode
-	} else if cfg.Global.OutputMode != "" {
-		// Config has a value - use it
-		resolvedOutputMode = cfg.Global.OutputMode
-	}
+	// Resolve output mode: flag > config > default
+	outputMode := resolveOutputMode(cfg)
 
 	opts := AnalysisOptions{
 		Repos:           args,
@@ -279,7 +298,7 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 		MaxWorkflowRuns: flagMaxWorkflowRuns,
 		Include:         flagInclude,
 		Exclude:         flagExclude,
-		OutputMode:      resolvedOutputMode,
+		OutputMode:      string(outputMode),
 	}
 
 	fullReport, err := pipelineRunner(opts)
@@ -335,24 +354,19 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 		renderer = &report.TextRenderer{}
 	}
 
-	// Parse output mode from the already-resolved value (respects flag > config > default)
-	outputMode := models.OutputModeObservational // default
-	switch resolvedOutputMode {
-	case "suggestive":
-		outputMode = models.OutputModeSuggestive
-	case "observational", "":
-		outputMode = models.OutputModeObservational
-	case "statistical":
-		outputMode = models.OutputModeStatistical
-	}
-
 	renderOpts := report.RenderOptions{
 		ShowExplanation: flagExplain,
 		OutputMode:      outputMode,
+		SummaryMode:     flagSummary,
 	}
 
 	if err := renderer.RenderWithOptions(fullReport, os.Stdout, renderOpts); err != nil {
 		fmt.Printf("Error rendering report: %v\n", err)
+	}
+
+	// Write to file if --output-file specified
+	if flagOutputFile != "" {
+		writeOutputFile(fullReport, renderOpts)
 	}
 
 	// Write to GitHub Actions Step Summary if running in GitHub Actions
@@ -372,5 +386,38 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 
 		fmt.Printf("\n❌ Failure: Health score is below the --fail-under threshold.\n")
 		os.Exit(1)
+	}
+}
+
+// writeOutputFile writes the report to flagOutputFile, auto-detecting format from extension.
+func writeOutputFile(fullReport *models.Report, renderOpts report.RenderOptions) {
+	fileFormat := report.FormatText
+	if strings.HasSuffix(flagOutputFile, ".json") {
+		fileFormat = report.FormatJSON
+	} else if strings.HasSuffix(flagOutputFile, ".md") {
+		fileFormat = report.FormatMarkdown
+	}
+
+	var fileRenderer report.Renderer
+	switch fileFormat {
+	case report.FormatJSON:
+		fileRenderer = &report.JSONRenderer{}
+	case report.FormatMarkdown:
+		fileRenderer = &report.MarkdownRenderer{}
+	default:
+		fileRenderer = &report.TextRenderer{}
+	}
+
+	f, err := os.Create(flagOutputFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating output file: %v\n", err)
+		return
+	}
+	defer func() { _ = f.Close() }()
+
+	if err := fileRenderer.RenderWithOptions(fullReport, f, renderOpts); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing output file: %v\n", err)
+	} else if shouldPrintInfo() {
+		fmt.Fprintf(os.Stderr, "\n✅ Report written to %s\n", flagOutputFile)
 	}
 }

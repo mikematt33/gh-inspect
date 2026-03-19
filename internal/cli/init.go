@@ -13,42 +13,42 @@ const defaultConfig = `# gh-inspect Configuration
 
 # Global settings
 global:
-  timeout: "2m"
-  concurrency: 5 # Max concurrent repo analysis
+  concurrency: 5          # Max concurrent repo analysis
   output_mode: "observational" # How findings are presented: observational (default), suggestive, statistical
-  # github_token: "YOUR_TOKEN" # Optional: Store token here (not recommended for shared machines)
+  # github_token: "YOUR_TOKEN" # Optional: store token here (not recommended for shared machines)
 
-# Output configuration
-output:
-  format: "json" # json, markdown, csv
-  path: "./report.json"
-  verbose: false
-
-# Analyzer Configuration
+# Analyzer configuration
 # Enable or disable specific analyzers and tune their parameters
 analyzers:
   pr_flow:
     enabled: true
     params:
-      stale_threshold_days: 14
-      cycle_time_target_hours: 48
-      exclude_bots: ["dependabot", "renovate"]
-
-  review_health:
-    enabled: true
-    params:
-      min_approvals_required: 1
+      stale_threshold_days: 14  # PRs inactive longer than this are flagged
 
   issue_hygiene:
     enabled: true
     params:
-      stale_threshold_days: 60
-      zombie_threshold_days: 365
+      stale_threshold_days: 60   # Issues inactive longer than this are flagged
+      zombie_threshold_days: 365 # Issues older than this are considered zombies
 
   repo_health:
     enabled: true
 
   ci:
+    enabled: true
+
+  security:
+    enabled: true
+
+  releases:
+    enabled: true
+
+  branches:
+    enabled: true
+    params:
+      stale_threshold_days: 90  # Branches inactive longer than this are flagged
+
+  dependencies:
     enabled: true
 `
 

@@ -66,17 +66,15 @@ type Finding struct {
 	Remediation      string   `json:"remediation,omitempty"`       // Advice on how to fix (suggestive mode)
 	Explanation      string   `json:"explanation,omitempty"`       // Why this matters (suggestive/observational modes)
 	SuggestedActions []string `json:"suggested_actions,omitempty"` // 1-2 concrete next steps (suggestive mode)
-	Observation      string   `json:"observation,omitempty"`       // Neutral observation (observational mode)
 }
 
 type Severity string
 
 const (
-	SeverityInfo     Severity = "info"
-	SeverityLow      Severity = "low"
-	SeverityMedium   Severity = "medium"
-	SeverityHigh     Severity = "high"
-	SeverityCritical Severity = "critical"
+	SeverityInfo   Severity = "info"
+	SeverityLow    Severity = "low"
+	SeverityMedium Severity = "medium"
+	SeverityHigh   Severity = "high"
 )
 
 // GlobalSummary holds aggregated data useful for multi-repo runs.

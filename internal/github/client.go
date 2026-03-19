@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -125,21 +126,19 @@ func startRate(r *github.Rate) *github.Rate {
 func (c *ClientWrapper) ListUserRepositories(ctx context.Context, user string, opts *github.RepositoryListOptions) ([]*github.Repository, error) {
 	var allRepos []*github.Repository
 
-	currentOpts := &github.RepositoryListByAuthenticatedUserOptions{
+	currentOpts := &github.RepositoryListByUserOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
+		Type:        "public",
 	}
 	if opts != nil {
-		// Copy relevant fields from opts to currentOpts
 		currentOpts.ListOptions = opts.ListOptions
-		currentOpts.Visibility = opts.Visibility
-		currentOpts.Affiliation = opts.Affiliation
 		currentOpts.Type = opts.Type
 		currentOpts.Sort = opts.Sort
 		currentOpts.Direction = opts.Direction
 	}
 
 	for {
-		repos, resp, err := c.GetUnderlyingClient().Repositories.ListByAuthenticatedUser(ctx, currentOpts)
+		repos, resp, err := c.GetUnderlyingClient().Repositories.ListByUser(ctx, user, currentOpts)
 		if err != nil {
 			return nil, err
 		}
@@ -202,8 +201,23 @@ func (c *ClientWrapper) ListCommitsSince(ctx context.Context, owner, repo string
 }
 
 func (c *ClientWrapper) GetRepository(ctx context.Context, owner, repo string) (*github.Repository, error) {
-	// Fetch from API
-	r, _, err := c.GetUnderlyingClient().Repositories.Get(ctx, owner, repo)
+	u := fmt.Sprintf("repos/%v/%v", owner, repo)
+	req, err := c.GetUnderlyingClient().NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use a wrapper that captures custom_properties as raw JSON to avoid type
+	// mismatch: the GitHub API may return arrays for multi-select properties,
+	// but go-github v60 types the field as map[string]string.
+	// The outer CustomProperties field (depth 0) shadows the embedded one (depth 1).
+	r := &github.Repository{}
+	wrapper := &struct {
+		*github.Repository
+		CustomProperties json.RawMessage `json:"custom_properties,omitempty"`
+	}{Repository: r}
+
+	_, err = c.GetUnderlyingClient().Do(ctx, req, wrapper)
 	if err != nil {
 		return nil, err
 	}

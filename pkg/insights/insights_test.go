@@ -127,19 +127,17 @@ func TestCalculateEngineeringHealthScore(t *testing.T) {
 						Findings: []models.Finding{
 							{Type: "missing_file"}, {Type: "missing_file"}, {Type: "missing_file"}, {Type: "missing_file"},
 							{Type: "missing_file"}, {Type: "missing_file"},
-						}, // -20 (max for files is implicit? code says float64(missing * 5))
-						// Logic: 6 files * 5 = 30.
+						}, // -20 (capped at 20: 6 * 5 = 30, capped to 20)
 					},
 					{
 						Name: "pr-flow",
-						Findings: []models.Finding{
-							{Type: "stale_pr"}, {Type: "stale_pr"}, {Type: "stale_pr"},
-							{Type: "stale_pr"}, {Type: "stale_pr"}, {Type: "stale_pr"},
+						Metrics: []models.Metric{
+							{Key: "stale_prs", Value: 6},
 						}, // -15 (>5 stale PRs)
 					},
 				},
 			},
-			// Total deducting: 30 + 20 + 15 + 30 + 15 = 110.
+			// Total deducting: 30 + 20 + 15 + 20 + 15 = 100.
 			// Result should be 0.
 			expected: 0,
 		},
@@ -509,19 +507,13 @@ func TestExplainScore_StalePRs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var findings []models.Finding
-			for i := 0; i < tt.staleCount; i++ {
-				findings = append(findings, models.Finding{
-					Type:    "stale_pr",
-					Message: "Stale PR",
-				})
-			}
-
 			repo := models.RepoResult{
 				Analyzers: []models.AnalyzerResult{
 					{
-						Name:     "pr-flow",
-						Findings: findings,
+						Name: "pr-flow",
+						Metrics: []models.Metric{
+							{Key: "stale_prs", Value: float64(tt.staleCount)},
+						},
 					},
 				},
 			}
@@ -581,13 +573,8 @@ func TestExplainScore_MultipleComponents(t *testing.T) {
 			},
 			{
 				Name: "pr-flow",
-				Findings: []models.Finding{
-					{Type: "stale_pr"},
-					{Type: "stale_pr"},
-					{Type: "stale_pr"},
-					{Type: "stale_pr"},
-					{Type: "stale_pr"},
-					{Type: "stale_pr"}, // -15
+				Metrics: []models.Metric{
+					{Key: "stale_prs", Value: 6}, // -15
 				},
 			},
 		},

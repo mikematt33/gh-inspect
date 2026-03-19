@@ -22,6 +22,7 @@ import (
 	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/security"
 	"github.com/mikematt33/gh-inspect/internal/config"
 	ghclient "github.com/mikematt33/gh-inspect/internal/github"
+	"github.com/mikematt33/gh-inspect/pkg/insights"
 	"github.com/mikematt33/gh-inspect/pkg/models"
 	"github.com/schollz/progressbar/v3"
 )
@@ -360,6 +361,13 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	var countHealth, countCI, countCIRuntime, countPRCycle int
 
 	for _, r := range fullReport.Repositories {
+		engScore := insights.CalculateEngineeringHealthScore(r)
+		sumHealth += float64(engScore)
+		countHealth++
+		if engScore < 50 {
+			fullReport.Summary.ReposAtRisk++
+		}
+
 		for _, az := range r.Analyzers {
 			fullReport.Summary.IssuesFound += len(az.Findings)
 
@@ -371,12 +379,6 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 					fullReport.Summary.TotalOpenIssues += int(m.Value)
 				case "zombie_issues":
 					fullReport.Summary.TotalZombieIssues += int(m.Value)
-				case "health_score":
-					sumHealth += m.Value
-					countHealth++
-					if m.Value < 50.0 {
-						fullReport.Summary.ReposAtRisk++
-					}
 				case "success_rate":
 					sumCISuccess += m.Value
 					countCI++

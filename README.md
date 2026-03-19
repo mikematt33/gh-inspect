@@ -65,7 +65,6 @@ make build
 - **Go Version**: 1.24.0 or higher
 - **GitHub Token**: Required for accessing GitHub API (5000 requests/hour with authentication)
 - **Rate Limit Considerations**: The tool includes smart API call optimization:
-  - Repository data caching (reduces duplicate calls by 2-3 per repo)
   - Time-windowed queries (only fetches data within analysis period)
   - Intelligent pagination limits (up to 5000 workflow runs, 1000 issues, etc.)
   - Pre-flight rate limit checks with warnings
@@ -471,6 +470,7 @@ Skip analyzers you don't need to save API rate limits and time.
 # Skip releases and branches analysis
 gh-inspect run owner/repo --exclude=releases,branches
 ```
+
 Filter which repositories to analyze based on multiple criteria.
 
 ```bash
@@ -600,10 +600,12 @@ See the complete [example workflow](.github/workflows/health-check.yml) for more
 `gh-inspect` is designed to be highly adaptable, scaling effortlessly from analyzing a single repository to thousands of repositories across enterprise organizations.
 
 ### Concurrency Controls
+
 When analyzing organizations that have hundreds or thousands of repositories, the CLI regulates API pressure and memory usage using worker pools governed by a concurrency limit.
 By default, concurrency is set to `5`. This limit can be adjusted in the `config.yaml` using the `global.concurrency` field. For massive organizations with high token throughput, significantly increasing this limit can speed up processing pipelines safely without risking local memory starvation.
 
 ### Multi-Token Round-Robin Support
+
 Running heavy inspections over large organizations can frequently strike the GitHub REST/GraphQL API rate limits. To aggressively combat API starvation, `gh-inspect` employs token splitting:
 You can provide an array of comma-separated tokens via the `GITHUB_TOKENS` environment variable (e.g. `GITHUB_TOKENS="tokenA,tokenB,tokenC"`).
 Under the hood, `gh-inspect` internally provisions a thread-safe round-robin rotator that automatically distributes outgoing requests sequentially across all supplied tokens—drastically extending the total number of allowed API calls across multiple identities before hitting block thresholds.

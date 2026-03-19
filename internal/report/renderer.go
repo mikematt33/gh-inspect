@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"text/tabwriter"
 	"time"
 
@@ -24,24 +23,12 @@ const (
 type RenderOptions struct {
 	ShowExplanation bool
 	OutputMode      models.OutputMode
+	SummaryMode     bool // Only show score + high/medium findings
 }
 
 type Renderer interface {
 	Render(report *models.Report, w io.Writer) error
 	RenderWithOptions(report *models.Report, w io.Writer, opts RenderOptions) error
-}
-
-func NewRenderer(f Format) Renderer {
-	switch f {
-	case FormatJSON:
-		return &JSONRenderer{}
-	case FormatText:
-		return &TextRenderer{}
-	case FormatMarkdown:
-		return &MarkdownRenderer{}
-	default:
-		return &TextRenderer{}
-	}
 }
 
 type JSONRenderer struct{}
@@ -68,6 +55,11 @@ func (r *TextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opt
 		return nil
 	}
 
+	// Summary mode: compact output with score + high/medium findings only
+	if opts.SummaryMode {
+		return r.renderSummaryMode(report, w, opts)
+	}
+
 	for _, repo := range report.Repositories {
 		_, _ = fmt.Fprintf(w, "\n🔎 REPORT FOR: %s (%s)\n", repo.Name, repo.URL)
 		_, _ = fmt.Fprintln(w, "==================================================")
@@ -77,10 +69,91 @@ func (r *TextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opt
 			continue
 		}
 
+		// 1. Lead with Score & Insights
+		outputMode := opts.OutputMode
+		if outputMode == "" {
+			outputMode = models.OutputModeObservational // default
+		}
+		engScore := insights.CalculateEngineeringHealthScore(repo)
+
+		_, _ = fmt.Fprintf(w, "\n[ opinionated-insights ]\n")
+		_, _ = fmt.Fprintf(w, "  Engineering Health Score: %d/100\n", engScore)
+
+		// Show score explanation if requested
+		if opts.ShowExplanation {
+			scoreComponents := insights.ExplainScore(repo, outputMode)
+			if len(scoreComponents) > 0 {
+				// Compact weight summary line: "CI: 30/30 · Team: 0/20 · ..."
+				_, _ = fmt.Fprintln(w, "")
+				_, _ = fmt.Fprintf(w, "  ")
+				for i, comp := range scoreComponents {
+					earned := comp.MaxWeight - comp.Impact
+					if earned < 0 {
+						earned = 0
+					}
+					if i > 0 {
+						_, _ = fmt.Fprintf(w, " · ")
+					}
+					_, _ = fmt.Fprintf(w, "%s: %d/%d", comp.Category, earned, comp.MaxWeight)
+				}
+				_, _ = fmt.Fprintln(w, "")
+
+				_, _ = fmt.Fprintln(w, "")
+				_, _ = fmt.Fprintln(w, "  Score Breakdown:")
+				_, _ = fmt.Fprintln(w, "  "+"─────────────────────────────────────────────────────")
+
+				totalImpact := 0
+				for _, comp := range scoreComponents {
+					totalImpact += comp.Impact
+
+					earned := comp.MaxWeight - comp.Impact
+					if earned < 0 {
+						earned = 0
+					}
+
+					// Show category with earned/max and deduction
+					impactStr := ""
+					if comp.Impact > 0 {
+						impactStr = fmt.Sprintf(" [-%d pts]", comp.Impact)
+					} else {
+						impactStr = " [✓]"
+					}
+					_, _ = fmt.Fprintf(w, "  • %s: %d/%d%s\n", comp.Category, earned, comp.MaxWeight, impactStr)
+					_, _ = fmt.Fprintf(w, "    Current: %s | Target: %s\n", comp.Current, comp.Target)
+
+					if comp.Tips != "" {
+						_, _ = fmt.Fprintf(w, "    💡 %s\n", comp.Tips)
+					}
+					_, _ = fmt.Fprintln(w, "")
+				}
+
+				_, _ = fmt.Fprintf(w, "  Final Score: 100 - %d = %d/100\n", totalImpact, engScore)
+			}
+		}
+
+		repoInsights := insights.GenerateInsights(repo, outputMode)
+		if len(repoInsights) > 0 {
+			_, _ = fmt.Fprintln(w, "")
+			for _, ins := range repoInsights {
+				icon := "ℹ️"
+				switch ins.Level {
+				case insights.LevelWarning:
+					icon = "⚠️"
+				case insights.LevelCritical:
+					icon = "🚨"
+				}
+				_, _ = fmt.Fprintf(w, "  %s %s: %s\n", icon, ins.Category, ins.Description)
+				_, _ = fmt.Fprintf(w, "     Action: %s\n", ins.Action)
+			}
+		} else {
+			_, _ = fmt.Fprintln(w, "  No critical insights found.")
+		}
+
+		// 2. Then show per-analyzer detail metrics and findings
 		for _, az := range repo.Analyzers {
 			_, _ = fmt.Fprintf(w, "\n[ %s ]\n", az.Name)
 
-			// 1. Metrics Table
+			// Metrics Table
 			if len(az.Metrics) > 0 {
 				tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 				for _, m := range az.Metrics {
@@ -94,7 +167,11 @@ func (r *TextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opt
 				_, _ = fmt.Fprintln(w, "")
 			}
 
-			// 2. Findings List
+			// Findings List (suppressed in statistical mode)
+			if opts.OutputMode == models.OutputModeStatistical {
+				continue
+			}
+
 			if len(az.Findings) > 0 {
 				_, _ = fmt.Fprintln(w, "  Findings:")
 				for _, f := range az.Findings {
@@ -123,66 +200,6 @@ func (r *TextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opt
 			} else {
 				_, _ = fmt.Fprintln(w, "  No issues found.")
 			}
-		}
-
-		// 3. Opinionated Insights & Score
-		outputMode := opts.OutputMode
-		if outputMode == "" {
-			outputMode = models.OutputModeObservational // default
-		}
-		repoInsights := insights.GenerateInsights(repo, outputMode)
-		engScore := insights.CalculateEngineeringHealthScore(repo)
-
-		_, _ = fmt.Fprintf(w, "\n[ opinionated-insights ]\n")
-		_, _ = fmt.Fprintf(w, "  Engineering Health Score: %d/100\n", engScore)
-
-		// Show score explanation if requested
-		if opts.ShowExplanation {
-			scoreComponents := insights.ExplainScore(repo, outputMode)
-			if len(scoreComponents) > 0 {
-				_, _ = fmt.Fprintln(w, "")
-				_, _ = fmt.Fprintln(w, "  Score Breakdown:")
-				_, _ = fmt.Fprintln(w, "  "+"─────────────────────────────────────────────────────")
-
-				totalImpact := 0
-				for _, comp := range scoreComponents {
-					totalImpact += comp.Impact
-
-					// Show category and impact
-					impactStr := ""
-					if comp.Impact > 0 {
-						impactStr = fmt.Sprintf(" [-%d pts]", comp.Impact)
-					} else {
-						impactStr = " [✓]"
-					}
-					_, _ = fmt.Fprintf(w, "  • %s%s\n", comp.Category, impactStr)
-					_, _ = fmt.Fprintf(w, "    Current: %s | Target: %s\n", comp.Current, comp.Target)
-
-					if comp.Tips != "" {
-						_, _ = fmt.Fprintf(w, "    💡 %s\n", comp.Tips)
-					}
-					_, _ = fmt.Fprintln(w, "")
-				}
-
-				_, _ = fmt.Fprintf(w, "  Final Score: 100 - %d = %d/100\n", totalImpact, engScore)
-			}
-		}
-
-		if len(repoInsights) > 0 {
-			_, _ = fmt.Fprintln(w, "")
-			for _, ins := range repoInsights {
-				icon := "ℹ️"
-				switch ins.Level {
-				case insights.LevelWarning:
-					icon = "⚠️"
-				case insights.LevelCritical:
-					icon = "🚨"
-				}
-				_, _ = fmt.Fprintf(w, "  %s %s: %s\n", icon, ins.Category, ins.Description)
-				_, _ = fmt.Fprintf(w, "     Action: %s\n", ins.Action)
-			}
-		} else {
-			_, _ = fmt.Fprintln(w, "  No critical insights found.")
 		}
 
 		_, _ = fmt.Fprintln(w, "--------------------------------------------------")
@@ -221,12 +238,51 @@ func (r *TextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opt
 	return nil
 }
 
-func PrintJSONLines(report *models.Report) error {
-	encoder := json.NewEncoder(os.Stdout)
+// renderSummaryMode outputs a compact view: repo name, score, and high/medium findings only.
+func (r *TextRenderer) renderSummaryMode(report *models.Report, w io.Writer, opts RenderOptions) error {
 	for _, repo := range report.Repositories {
-		if err := encoder.Encode(repo); err != nil {
-			return err
+		engScore := insights.CalculateEngineeringHealthScore(repo)
+		scoreEmoji := "🟢"
+		switch {
+		case engScore < 50:
+			scoreEmoji = "🔴"
+		case engScore < 75:
+			scoreEmoji = "🟠"
+		case engScore < 90:
+			scoreEmoji = "🟡"
+		}
+
+		_, _ = fmt.Fprintf(w, "\n%s %s  Health: %d/100\n", scoreEmoji, repo.Name, engScore)
+
+		// Collect high/medium findings across all analyzers
+		hasFindings := false
+		for _, az := range repo.Analyzers {
+			for _, f := range az.Findings {
+				if f.Severity == models.SeverityHigh || f.Severity == models.SeverityMedium {
+					if !hasFindings {
+						hasFindings = true
+					}
+					icon := "⚠️"
+					if f.Severity == models.SeverityHigh {
+						icon = "🚨"
+					}
+					_, _ = fmt.Fprintf(w, "  %s [%s] %s: %s\n", icon, az.Name, f.Type, f.Message)
+				}
+			}
+		}
+		if !hasFindings {
+			_, _ = fmt.Fprintln(w, "  No high/medium findings.")
 		}
 	}
+
+	// Print aggregate if multiple repos
+	if len(report.Repositories) > 1 && report.Summary.AvgHealthScore > 0 {
+		_, _ = fmt.Fprintf(w, "\n📊 Avg Health: %.0f/100 | %d repos | %d at risk\n",
+			report.Summary.AvgHealthScore,
+			report.Summary.TotalReposAnalyzed,
+			report.Summary.ReposAtRisk)
+	}
+
 	return nil
 }
+

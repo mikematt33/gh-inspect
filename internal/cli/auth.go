@@ -60,7 +60,6 @@ func init() {
 	authCmd.AddCommand(authLogoutCmd)
 
 	// Add flags
-	authCmd.PersistentFlags().BoolVar(&flagNoBrowser, "no-browser", false, "Disable browser-based authentication (use device code flow)")
 	authLoginCmd.Flags().BoolVar(&flagNoBrowser, "no-browser", false, "Disable browser-based authentication (use device code flow)")
 }
 

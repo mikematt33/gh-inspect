@@ -262,9 +262,14 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	}
 
 	if len(findings) > 0 {
+		severityRank := map[models.Severity]int{
+			models.SeverityHigh:   0,
+			models.SeverityMedium: 1,
+			models.SeverityLow:    2,
+			models.SeverityInfo:   3,
+		}
 		sort.Slice(findings, func(i, j int) bool {
-			// sort by severity?
-			return findings[i].Severity == models.SeverityHigh // simple float up
+			return severityRank[findings[i].Severity] < severityRank[findings[j].Severity]
 		})
 	}
 
