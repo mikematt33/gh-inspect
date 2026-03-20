@@ -159,6 +159,11 @@ func runUserAnalysis(cmd *cobra.Command, args []string) {
 	}
 
 	fullReport.Summary.TotalReposAnalyzed = len(targetRepos)
+	applyRemediationTracking(fullReport)
+	if _, _, err := handleBaselineFeatures(fullReport); err != nil {
+		fmt.Printf("\n❌ Failure: %v.\n", err)
+		os.Exit(1)
+	}
 
 	var renderer report.Renderer
 	switch flagFormat {

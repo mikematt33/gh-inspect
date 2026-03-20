@@ -202,7 +202,7 @@ func TestEvaluateRepositoryMatchesLegacyFunctions(t *testing.T) {
 	repo := models.RepoResult{
 		Analyzers: []models.AnalyzerResult{
 			{
-				Name: "ci",
+				Name:    "ci",
 				Metrics: []models.Metric{{Key: "success_rate", Value: 40.0}},
 			},
 			{
@@ -213,7 +213,7 @@ func TestEvaluateRepositoryMatchesLegacyFunctions(t *testing.T) {
 				},
 			},
 			{
-				Name: "repo-health",
+				Name:     "repo-health",
 				Findings: []models.Finding{{Type: "missing_file", Message: "Missing key file: README.md"}},
 			},
 		},

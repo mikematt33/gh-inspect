@@ -164,6 +164,11 @@ func runOrgAnalysis(cmd *cobra.Command, args []string) {
 
 	// Inject Org-level Stats into Summary
 	fullReport.Summary.TotalReposAnalyzed = len(targetRepos)
+	applyRemediationTracking(fullReport)
+	if _, _, err := handleBaselineFeatures(fullReport); err != nil {
+		fmt.Printf("\n❌ Failure: %v.\n", err)
+		os.Exit(1)
+	}
 
 	// 5. Render Output
 	var renderer report.Renderer

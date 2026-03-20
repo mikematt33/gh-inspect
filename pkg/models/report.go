@@ -60,6 +60,9 @@ type Metric struct {
 type Finding struct {
 	Type             string   `json:"type"` // e.g. "stale_pr", "missing_owner"
 	Severity         Severity `json:"severity"`
+	TrackingID       string   `json:"tracking_id,omitempty"`
+	RemediationState string   `json:"remediation_state,omitempty"`
+	RemediationNote  string   `json:"remediation_note,omitempty"`
 	Message          string   `json:"message"`
 	Location         string   `json:"location,omitempty"` // URL or file path
 	Actionable       bool     `json:"actionable"`
@@ -83,13 +86,18 @@ type GlobalSummary struct {
 	IssuesFound        int `json:"issues_found"`
 
 	// Aggregated Metrics
-	TotalCommits      int     `json:"total_commits"`
-	TotalOpenIssues   int     `json:"total_open_issues"`
-	TotalZombieIssues int     `json:"total_zombie_issues"`
-	BusFactor1Repos   int     `json:"bus_factor_1_repos"` // Count of repos with BF=1
-	ReposAtRisk       int     `json:"repos_at_risk"`      // Count of repos with Health < 50
-	AvgHealthScore    float64 `json:"avg_health_score"`
-	AvgCISuccessRate  float64 `json:"avg_ci_success_rate"`
-	AvgCIRuntime      float64 `json:"avg_ci_runtime"`    // Avg CI runtime in seconds
-	AvgPRCycleTime    float64 `json:"avg_pr_cycle_time"` // Avg of avg cycle times
+	TotalCommits          int     `json:"total_commits"`
+	TotalOpenIssues       int     `json:"total_open_issues"`
+	TotalZombieIssues     int     `json:"total_zombie_issues"`
+	BusFactor1Repos       int     `json:"bus_factor_1_repos"` // Count of repos with BF=1
+	ReposAtRisk           int     `json:"repos_at_risk"`      // Count of repos with Health < 50
+	AvgHealthScore        float64 `json:"avg_health_score"`
+	AvgCISuccessRate      float64 `json:"avg_ci_success_rate"`
+	AvgCIRuntime          float64 `json:"avg_ci_runtime"`    // Avg CI runtime in seconds
+	AvgPRCycleTime        float64 `json:"avg_pr_cycle_time"` // Avg of avg cycle times
+	RemediationOpen       int     `json:"remediation_open,omitempty"`
+	RemediationInProgress int     `json:"remediation_in_progress,omitempty"`
+	RemediationResolved   int     `json:"remediation_resolved,omitempty"`
+	RemediationAccepted   int     `json:"remediation_accepted,omitempty"`
+	RemediationIgnored    int     `json:"remediation_ignored,omitempty"`
 }

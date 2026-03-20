@@ -535,7 +535,7 @@ func explainScoreWithIndex(idx repoIndex, outputMode models.OutputMode) []ScoreC
 		}
 		current := "0 alerts"
 		if len(currentParts) > 0 {
-			current = fmt.Sprintf("%s", joinParts(currentParts))
+			current = joinParts(currentParts)
 		}
 
 		components = append(components, ScoreComponent{

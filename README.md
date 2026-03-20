@@ -13,6 +13,8 @@
 - **Engineering Health Score**: Aggregates hundreds of data points into a single 0-100 score.
 - **Flexible Output Modes**: Choose between suggestive (prescriptive advice), observational (neutral facts), or statistical (numbers only) presentation.
 - **Baseline & Regression Detection**: Track score changes over time and detect regressions automatically.
+- **Baseline History & Trends**: Save timestamped snapshots and compare the current run against recent history.
+- **Remediation Tracking**: Assign stable finding IDs and track findings as open, in-progress, resolved, accepted, or ignored.
 - **Score Explanation**: Detailed breakdown showing why your score changed with improvement tips.
 - **Bus Factor Analysis**: Identifies if your project relies too heavily on single contributors.
 - **Code Quality Metrics**: Tracks code churn, review coverage, and review depth.
@@ -240,7 +242,7 @@ gh-inspect org organization [flags]
 
 **Flags:**
 
-- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--include`, `--exclude`).
+- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--compare-history`, `--fail-on-regression`, `--fail-under`, `--include`, `--exclude`, `--remediation-file`).
 - **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
 
 **Filtering Examples:**
@@ -281,10 +283,12 @@ gh-inspect run owner/repo [flags]
 - `--save-baseline`: Save this run as the new baseline.
 - `--compare-last`: Compare with last saved baseline.
 - `--fail-on-regression`: Exit with error if regression detected.
+- `--compare-history int`: Compare against the last N baseline snapshots and print a trend summary.
 - `--fail-under int`: Exit with error code 1 if average health score is below this value.
 - `--include strings`: Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health,dependencies).
 - `--exclude strings`: Exclude specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health,dependencies).
 - `--list-analyzers`: List all available analyzers with descriptions and exit.
+- `--remediation-file string`: Path to remediation tracking file.
 
 **Global Flags:**
 
@@ -298,6 +302,23 @@ During analysis, a clean progress bar shows:
 - Current progress: `Analyzing repositories (5/10)`
 - Automatically clears when complete for clean output
 - Can be suppressed with `--quiet` flag for CI/CD pipelines
+
+#### `remediation`
+
+Track and update finding remediation state.
+
+```bash
+gh-inspect remediation list owner/repo
+gh-inspect remediation set-status <finding-id> in-progress --note="Assigned to platform team"
+```
+
+Supported remediation states:
+
+- `open`
+- `in-progress`
+- `resolved`
+- `accepted`
+- `ignored`
 
 #### `uninstall`
 
@@ -335,7 +356,7 @@ gh-inspect user username [flags]
 
 **Flags:**
 
-- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--include`, `--exclude`).
+- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--compare-history`, `--fail-on-regression`, `--fail-under`, `--include`, `--exclude`, `--remediation-file`).
 - **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
 
 ### Examples
@@ -389,6 +410,9 @@ gh-inspect run owner/repo --save-baseline
 # Later runs - compare against baseline
 gh-inspect run owner/repo --compare-last
 
+# Compare against the latest 5 snapshots and print a trend summary
+gh-inspect run owner/repo --compare-history=5
+
 # Fail CI if score dropped
 gh-inspect run owner/repo --compare-last --fail-on-regression
 
@@ -397,6 +421,10 @@ gh-inspect run owner/repo --save-baseline --baseline=./baseline-prod.json
 
 # Compare against specific baseline
 gh-inspect run owner/repo --baseline=./baseline-prod.json
+
+# Save latest baseline and a timestamped historical snapshot
+# Snapshots are stored next to the baseline in a *-history directory
+gh-inspect run owner/repo --save-baseline --baseline=./baseline-prod.json
 ```
 
 **Markdown Output for GitHub Actions**

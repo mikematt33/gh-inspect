@@ -109,6 +109,22 @@ func showTopChanges(comp *baseline.ComparisonResult) {
 	}
 }
 
+func printTrendSummary(trend *baseline.TrendSummary) {
+	if trend == nil || len(trend.Points) == 0 {
+		return
+	}
+
+	fmt.Println("\n" + colorBold + "📈 Baseline Trend" + colorReset)
+	first := trend.Points[0]
+	latest := trend.Points[len(trend.Points)-1]
+	fmt.Printf("Window: %s → %s (%d snapshot(s))\n", first.Timestamp.Format(time.RFC3339), latest.Timestamp.Format(time.RFC3339), trend.ComparedSnapshots)
+	printMetricDelta("Health Score", trend.HealthScoreDelta, true)
+	printMetricDelta("CI Success Rate", trend.CISuccessRateDelta, true)
+	printMetricDelta("PR Cycle Time", trend.PRCycleTimeDelta, false)
+	printMetricDelta("Issues Found", float64(trend.IssuesFoundDelta), false)
+	fmt.Println()
+}
+
 // ANSI color codes
 const (
 	colorReset = "\033[0m"

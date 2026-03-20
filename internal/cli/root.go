@@ -7,7 +7,6 @@ import (
 
 	"github.com/mikematt33/gh-inspect/internal/config"
 	"github.com/mikematt33/gh-inspect/internal/report"
-	"github.com/mikematt33/gh-inspect/pkg/baseline"
 	"github.com/mikematt33/gh-inspect/pkg/models"
 	"github.com/spf13/cobra"
 )
@@ -101,6 +100,8 @@ var (
 	flagOutputMode       string
 	flagSummary          bool
 	flagOutputFile       string
+	flagCompareHistory   int
+	flagRemediationFile  string
 	// Filtering flags
 	flagFilterName      string
 	flagFilterLanguage  []string
@@ -170,6 +171,7 @@ func registerAnalysisFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&flagBaseline, "baseline", "", "Path to baseline file to compare against")
 	cmd.Flags().BoolVar(&flagSaveBaseline, "save-baseline", false, "Save this run as the new baseline")
 	cmd.Flags().BoolVar(&flagFailOnRegression, "fail-on-regression", false, "Exit with error if regression detected")
+	cmd.Flags().IntVar(&flagCompareHistory, "compare-history", 0, "Compare against the last N baseline snapshots and print a trend summary")
 
 	// Scoring transparency
 	cmd.Flags().BoolVar(&flagExplain, "explain", false, "Show detailed score breakdown and improvement tips")
@@ -185,6 +187,7 @@ func registerAnalysisFlags(cmd *cobra.Command) {
 
 	// Output file (write to file while still printing to terminal)
 	cmd.Flags().StringVar(&flagOutputFile, "output-file", "", "Write report to file (e.g. report.json) while still printing to terminal")
+	cmd.Flags().StringVar(&flagRemediationFile, "remediation-file", "", "Path to remediation tracking file")
 
 	// Caching
 }
@@ -307,40 +310,10 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Handle baseline comparison if requested
-	var comparison *baseline.ComparisonResult
-	if flagCompareLast || flagBaseline != "" {
-		baselinePath := flagBaseline
-		if baselinePath == "" {
-			baselinePath = baseline.GetDefaultBaselinePath()
-		}
-
-		previousBaseline, err := baseline.Load(baselinePath)
-		if err != nil {
-			if shouldPrintInfo() {
-				fmt.Printf("⚠️  Could not load baseline for comparison: %v\n", err)
-			}
-		} else {
-			comparison = baseline.Compare(fullReport, previousBaseline)
-			if shouldPrintInfo() {
-				printComparison(comparison)
-			}
-
-			if flagFailOnRegression && comparison != nil && comparison.Summary.HasRegression {
-				fmt.Printf("\n❌ Failure: Regression detected compared to baseline.\n")
-				os.Exit(1)
-			}
-		}
-	}
-
-	// Save baseline if requested
-	if flagSaveBaseline {
-		baselinePath := baseline.GetDefaultBaselinePath()
-		if err := baseline.Save(fullReport, baselinePath); err != nil {
-			fmt.Printf("⚠️  Failed to save baseline: %v\n", err)
-		} else if shouldPrintInfo() {
-			fmt.Printf("\n✅ Baseline saved to %s\n", baselinePath)
-		}
+	applyRemediationTracking(fullReport)
+	if _, _, err := handleBaselineFeatures(fullReport); err != nil {
+		fmt.Printf("\n❌ Failure: %v.\n", err)
+		os.Exit(1)
 	}
 
 	// 4. Render Output

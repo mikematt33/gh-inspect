@@ -183,7 +183,14 @@ func (r *TextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opt
 					case models.SeverityMedium:
 						icon = "⚠️"
 					}
-					_, _ = fmt.Fprintf(w, "    %s %s: %s\n", icon, f.Type, f.Message)
+					tracking := ""
+					if f.TrackingID != "" {
+						tracking = fmt.Sprintf(" [%s|%s]", f.TrackingID, f.RemediationState)
+					}
+					_, _ = fmt.Fprintf(w, "    %s %s%s: %s\n", icon, f.Type, tracking, f.Message)
+					if f.RemediationNote != "" {
+						_, _ = fmt.Fprintf(w, "       Note: %s\n", f.RemediationNote)
+					}
 
 					// Show explanation if available
 					if f.Explanation != "" {
@@ -219,6 +226,13 @@ func (r *TextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opt
 	_, _ = fmt.Fprintf(tw, "Zombie Issues:\t%d\n", report.Summary.TotalZombieIssues)
 	_, _ = fmt.Fprintf(tw, "Repos At Risk (<50):\t%d\n", report.Summary.ReposAtRisk)
 	_, _ = fmt.Fprintf(tw, "Bus Factor 1 Repos:\t%d\n", report.Summary.BusFactor1Repos)
+	if report.Summary.RemediationOpen+report.Summary.RemediationInProgress+report.Summary.RemediationResolved+report.Summary.RemediationAccepted+report.Summary.RemediationIgnored > 0 {
+		_, _ = fmt.Fprintf(tw, "Remediation Open:\t%d\n", report.Summary.RemediationOpen)
+		_, _ = fmt.Fprintf(tw, "Remediation In Progress:\t%d\n", report.Summary.RemediationInProgress)
+		_, _ = fmt.Fprintf(tw, "Remediation Resolved:\t%d\n", report.Summary.RemediationResolved)
+		_, _ = fmt.Fprintf(tw, "Remediation Accepted:\t%d\n", report.Summary.RemediationAccepted)
+		_, _ = fmt.Fprintf(tw, "Remediation Ignored:\t%d\n", report.Summary.RemediationIgnored)
+	}
 
 	if report.Summary.AvgHealthScore > 0 {
 		_, _ = fmt.Fprintf(tw, "Avg Health Score:\t%.1f/100\n", report.Summary.AvgHealthScore)
@@ -286,4 +300,3 @@ func (r *TextRenderer) renderSummaryMode(report *models.Report, w io.Writer, opt
 
 	return nil
 }
-

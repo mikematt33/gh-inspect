@@ -94,7 +94,14 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 						default:
 							infoCount++
 						}
-						_, _ = fmt.Fprintf(w, "- %s **%s:** %s\n", icon, f.Type, f.Message)
+						status := ""
+						if f.TrackingID != "" {
+							status = fmt.Sprintf(" `[%s|%s]`", f.TrackingID, f.RemediationState)
+						}
+						_, _ = fmt.Fprintf(w, "- %s **%s**%s: %s\n", icon, f.Type, status, f.Message)
+						if f.RemediationNote != "" {
+							_, _ = fmt.Fprintf(w, "  - *Note:* %s\n", f.RemediationNote)
+						}
 
 						// Show explanation if available
 						if f.Explanation != "" {
@@ -177,6 +184,13 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 		}
 		if report.Summary.AvgCISuccessRate > 0 {
 			_, _ = fmt.Fprintf(w, "| Average CI Success Rate | %.1f%% |\n", report.Summary.AvgCISuccessRate)
+		}
+		if report.Summary.RemediationOpen+report.Summary.RemediationInProgress+report.Summary.RemediationResolved+report.Summary.RemediationAccepted+report.Summary.RemediationIgnored > 0 {
+			_, _ = fmt.Fprintf(w, "| Remediation Open | %d |\n", report.Summary.RemediationOpen)
+			_, _ = fmt.Fprintf(w, "| Remediation In Progress | %d |\n", report.Summary.RemediationInProgress)
+			_, _ = fmt.Fprintf(w, "| Remediation Resolved | %d |\n", report.Summary.RemediationResolved)
+			_, _ = fmt.Fprintf(w, "| Remediation Accepted | %d |\n", report.Summary.RemediationAccepted)
+			_, _ = fmt.Fprintf(w, "| Remediation Ignored | %d |\n", report.Summary.RemediationIgnored)
 		}
 
 		_, _ = fmt.Fprintln(w, "")
