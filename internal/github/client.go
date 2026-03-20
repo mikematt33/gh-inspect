@@ -243,41 +243,31 @@ func (c *ClientWrapper) GetPullRequest(ctx context.Context, owner, repo string, 
 }
 
 // GetIssues implements analysis.Client.
-// Auto-paginates up to a reasonable limit to avoid excessive API calls
-func (c *ClientWrapper) GetIssues(ctx context.Context, owner, repo string, opts *github.IssueListByRepoOptions) ([]*github.Issue, error) {
-	var allIssues []*github.Issue
-
+// It returns a single filtered page and leaves pagination strategy to the caller.
+func (c *ClientWrapper) GetIssues(ctx context.Context, owner, repo string, opts *github.IssueListByRepoOptions) ([]*github.Issue, *github.Response, error) {
+	if opts == nil {
+		opts = &github.IssueListByRepoOptions{}
+	}
 	if opts.PerPage == 0 {
 		opts.PerPage = 100
 	}
 
-	// Prevent unbounded pagination - caller should handle limits
-	// This method will paginate automatically but not infinitely
-	maxPages := 5 // Maximum 5 pages (500 issues with perPage=100)
-	pageCount := 0
-
-	for {
-		issues, resp, err := c.GetUnderlyingClient().Issues.ListByRepo(ctx, owner, repo, opts)
-		if err != nil {
-			return nil, err
-		}
-		if resp != nil {
-			c.checkRateLimit(resp)
-		}
-
-		for _, issue := range issues {
-			if !issue.IsPullRequest() {
-				allIssues = append(allIssues, issue)
-			}
-		}
-
-		pageCount++
-		if resp == nil || resp.NextPage == 0 || pageCount >= maxPages {
-			break
-		}
-		opts.Page = resp.NextPage
+	issues, resp, err := c.GetUnderlyingClient().Issues.ListByRepo(ctx, owner, repo, opts)
+	if err != nil {
+		return nil, resp, err
 	}
-	return allIssues, nil
+	if resp != nil {
+		c.checkRateLimit(resp)
+	}
+
+	filtered := make([]*github.Issue, 0, len(issues))
+	for _, issue := range issues {
+		if !issue.IsPullRequest() {
+			filtered = append(filtered, issue)
+		}
+	}
+
+	return filtered, resp, nil
 }
 
 func (c *ClientWrapper) GetIssueComments(ctx context.Context, owner, repo string, number int, opts *github.IssueListCommentsOptions) ([]*github.IssueComment, error) {

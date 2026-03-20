@@ -58,8 +58,8 @@ func (m *MockClient) GetContent(ctx context.Context, owner, repo, path string) (
 func (m *MockClient) GetCombinedStatus(ctx context.Context, owner, repo, ref string) (*github.CombinedStatus, error) {
 	return m.CombinedStatus, nil
 }
-func (m *MockClient) GetIssues(ctx context.Context, owner, repo string, opts *github.IssueListByRepoOptions) ([]*github.Issue, error) {
-	return m.Issues, nil
+func (m *MockClient) GetIssues(ctx context.Context, owner, repo string, opts *github.IssueListByRepoOptions) ([]*github.Issue, *github.Response, error) {
+	return m.Issues, nil, nil
 }
 func (m *MockClient) GetIssueComments(ctx context.Context, owner, repo string, number int, opts *github.IssueListCommentsOptions) ([]*github.IssueComment, error) {
 	return nil, nil

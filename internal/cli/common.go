@@ -215,6 +215,25 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 		analyzers = append(analyzers, dependencies.New())
 	}
 
+	// Warn about unknown names in --include so typos don't silently produce empty results
+	if len(opts.Include) > 0 {
+		known := map[string]bool{
+			"activity": true, "prflow": true, "pr-flow": true,
+			"ci": true, "issues": true, "issue-hygiene": true,
+			"security": true, "releases": true, "branches": true,
+			"dependencies": true, "health": true, "repo-health": true,
+		}
+		var unknown []string
+		for _, name := range opts.Include {
+			if !known[name] {
+				unknown = append(unknown, name)
+			}
+		}
+		if len(unknown) > 0 {
+			fmt.Fprintf(os.Stderr, "⚠️  WARNING: Unknown analyzer(s) in --include: %s\n   Valid names: activity, prflow, ci, issues, security, releases, branches, dependencies, health\n", strings.Join(unknown, ", "))
+		}
+	}
+
 	start := time.Now()
 
 	// Setup context with cancellation support
@@ -244,9 +263,9 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	var completed int
 	totalRepos := len(opts.Repos)
 
-	// Create progress bar if not in quiet mode
+	// Create progress bar if not in quiet or verbose mode (verbose prints per-repo lines instead)
 	var bar *progressbar.ProgressBar
-	if shouldPrintInfo() {
+	if shouldPrintInfo() && !shouldPrintVerbose() {
 		bar = progressbar.NewOptions(totalRepos,
 			progressbar.OptionSetDescription("Analyzing repositories"),
 			progressbar.OptionSetWidth(40),
@@ -317,7 +336,7 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 					res.Name = az.Name()
 					res.Findings = append(res.Findings, models.Finding{
 						Type:     "analyzer_error",
-						Severity: models.SeverityHigh,
+						Severity: models.SeverityLow,
 						Message:  fmt.Sprintf("Analysis failed: %v", err),
 					})
 				}

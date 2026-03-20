@@ -175,7 +175,7 @@ func registerAnalysisFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&flagExplain, "explain", false, "Show detailed score breakdown and improvement tips")
 
 	// Output mode (how findings are presented)
-	cmd.Flags().StringVar(&flagOutputMode, "output-mode", "observational", "Output mode: suggestive (prescriptive advice), observational (neutral facts, default), statistical (numbers only)")
+	cmd.Flags().StringVar(&flagOutputMode, "output-mode", "", "Output mode: suggestive (prescriptive advice), observational (neutral facts, default), statistical (numbers only). Defaults to global.output_mode in config, or observational.")
 	_ = cmd.RegisterFlagCompletionFunc("output-mode", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{"suggestive", "observational", "statistical"}, cobra.ShellCompDirectiveNoFileComp
 	})
@@ -383,8 +383,7 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 
 	// Exit Code Check for health score
 	if flagFail > 0 && fullReport.Summary.AvgHealthScore < float64(flagFail) {
-
-		fmt.Printf("\n❌ Failure: Health score is below the --fail-under threshold.\n")
+		fmt.Printf("\n❌ Failure: Health score (%.1f) is below the --fail-under threshold (%d).\n", fullReport.Summary.AvgHealthScore, flagFail)
 		os.Exit(1)
 	}
 }

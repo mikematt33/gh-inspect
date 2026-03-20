@@ -78,10 +78,19 @@ func runComparison(cmd *cobra.Command, args []string) {
 	if flagFormat == "json" {
 		renderer = &report.JSONRenderer{}
 	} else {
+		if flagFormat == "markdown" && shouldPrintInfo() {
+			fmt.Fprintln(os.Stderr, "⚠️  Markdown format is not supported for compare, using text.")
+		}
 		renderer = &report.ComparisonTextRenderer{}
 	}
 
-	if err := renderer.Render(fullReport, os.Stdout); err != nil {
+	renderOpts := report.RenderOptions{
+		ShowExplanation: flagExplain,
+		OutputMode:      outputMode,
+		SummaryMode:     flagSummary,
+	}
+
+	if err := renderer.RenderWithOptions(fullReport, os.Stdout, renderOpts); err != nil {
 		fmt.Printf("Error rendering report: %v\n", err)
 	}
 }

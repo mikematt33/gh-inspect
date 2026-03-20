@@ -28,8 +28,8 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 	_, _ = fmt.Fprintln(w, "")
 
 	for _, repo := range report.Repositories {
-		// Calculate score first
-		engScore := insights.CalculateEngineeringHealthScore(repo)
+		evaluation := insights.EvaluateRepository(repo, opts.OutputMode, opts.ShowExplanation)
+		engScore := evaluation.Score
 		scoreEmoji := getScoreEmoji(engScore)
 
 		_, _ = fmt.Fprintf(w, "### %s %s\n", scoreEmoji, repo.Name)
@@ -37,11 +37,7 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 
 		// Show score breakdown if requested
 		if opts.ShowExplanation {
-			outputMode := opts.OutputMode
-			if outputMode == "" {
-				outputMode = models.OutputModeObservational
-			}
-			r.renderScoreBreakdown(repo, engScore, w, outputMode)
+			r.renderScoreBreakdown(evaluation.Components, engScore, w)
 		}
 
 		// Key Metrics Summary
@@ -134,11 +130,7 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 		}
 
 		// Insights
-		outputMode := opts.OutputMode
-		if outputMode == "" {
-			outputMode = models.OutputModeObservational // default
-		}
-		repoInsights := insights.GenerateInsights(repo, outputMode)
+		repoInsights := evaluation.Insights
 		if len(repoInsights) > 0 {
 			_, _ = fmt.Fprintln(w, "#### 💡 Recommendations")
 			_, _ = fmt.Fprintln(w, "")
@@ -197,11 +189,7 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 	return nil
 }
 
-func (r *MarkdownRenderer) renderScoreBreakdown(repo models.RepoResult, engScore int, w io.Writer, outputMode models.OutputMode) {
-	if outputMode == "" {
-		outputMode = models.OutputModeObservational // default
-	}
-	scoreComponents := insights.ExplainScore(repo, outputMode)
+func (r *MarkdownRenderer) renderScoreBreakdown(scoreComponents []insights.ScoreComponent, engScore int, w io.Writer) {
 	if len(scoreComponents) == 0 {
 		return
 	}

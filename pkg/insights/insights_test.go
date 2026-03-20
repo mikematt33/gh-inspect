@@ -198,6 +198,39 @@ func TestGenerateInsights(t *testing.T) {
 	}
 }
 
+func TestEvaluateRepositoryMatchesLegacyFunctions(t *testing.T) {
+	repo := models.RepoResult{
+		Analyzers: []models.AnalyzerResult{
+			{
+				Name: "ci",
+				Metrics: []models.Metric{{Key: "success_rate", Value: 40.0}},
+			},
+			{
+				Name: "activity",
+				Metrics: []models.Metric{
+					{Key: "bus_factor", Value: 1},
+					{Key: "active_contributors", Value: 4},
+				},
+			},
+			{
+				Name: "repo-health",
+				Findings: []models.Finding{{Type: "missing_file", Message: "Missing key file: README.md"}},
+			},
+		},
+	}
+
+	evaluation := EvaluateRepository(repo, models.OutputModeObservational, true)
+	if evaluation.Score != CalculateEngineeringHealthScore(repo) {
+		t.Fatalf("expected score %d, got %d", CalculateEngineeringHealthScore(repo), evaluation.Score)
+	}
+	if len(evaluation.Insights) != len(GenerateInsights(repo, models.OutputModeObservational)) {
+		t.Fatalf("expected %d insights, got %d", len(GenerateInsights(repo, models.OutputModeObservational)), len(evaluation.Insights))
+	}
+	if len(evaluation.Components) != len(ExplainScore(repo, models.OutputModeObservational)) {
+		t.Fatalf("expected %d components, got %d", len(ExplainScore(repo, models.OutputModeObservational)), len(evaluation.Components))
+	}
+}
+
 func TestExplainScore_CIStability(t *testing.T) {
 	tests := []struct {
 		name           string

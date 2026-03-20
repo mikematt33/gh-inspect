@@ -108,8 +108,8 @@ func Load() (*Config, error) {
 			IssueHygiene: IssueHygieneConfig{
 				Enabled: true,
 				Params: IssueHygieneParams{
-					StaleThresholdDays:  30,
-					ZombieThresholdDays: 180,
+					StaleThresholdDays:  60,
+					ZombieThresholdDays: 365,
 				},
 			},
 			RepoHealth: RepoHealthConfig{

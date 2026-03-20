@@ -74,14 +74,15 @@ func (r *TextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opt
 		if outputMode == "" {
 			outputMode = models.OutputModeObservational // default
 		}
-		engScore := insights.CalculateEngineeringHealthScore(repo)
+		evaluation := insights.EvaluateRepository(repo, outputMode, opts.ShowExplanation)
+		engScore := evaluation.Score
 
 		_, _ = fmt.Fprintf(w, "\n[ opinionated-insights ]\n")
 		_, _ = fmt.Fprintf(w, "  Engineering Health Score: %d/100\n", engScore)
 
 		// Show score explanation if requested
 		if opts.ShowExplanation {
-			scoreComponents := insights.ExplainScore(repo, outputMode)
+			scoreComponents := evaluation.Components
 			if len(scoreComponents) > 0 {
 				// Compact weight summary line: "CI: 30/30 · Team: 0/20 · ..."
 				_, _ = fmt.Fprintln(w, "")
@@ -131,7 +132,7 @@ func (r *TextRenderer) RenderWithOptions(report *models.Report, w io.Writer, opt
 			}
 		}
 
-		repoInsights := insights.GenerateInsights(repo, outputMode)
+		repoInsights := evaluation.Insights
 		if len(repoInsights) > 0 {
 			_, _ = fmt.Fprintln(w, "")
 			for _, ins := range repoInsights {

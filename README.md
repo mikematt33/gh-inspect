@@ -517,7 +517,7 @@ Use `gh-inspect` in your GitHub Actions workflows for automated repository healt
 
 Generate markdown reports with rich formatting, suitable for PR comments and GitHub summaries:
 
-- **Score badges** with color-coded emojis (🟢 90+, 🟡 70-89, 🟠 50-69, 🔴 <50)
+- **Score badges** with color-coded emojis (🟢 90+, 🟡 75-89, 🟠 50-74, 🔴 <50)
 - **Collapsible findings** grouped by analyzer for easy navigation
 - **Detailed explanations** for each finding with "Why this matters"
 - **Actionable suggestions** with numbered steps for improvement
