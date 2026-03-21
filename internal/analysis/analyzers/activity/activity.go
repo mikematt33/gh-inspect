@@ -119,7 +119,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		}
 	}
 
-	busFactor, topAuthors := calculateBusFactor(authorCounts, int(totalCommits))
+	busFactor := calculateBusFactor(authorCounts, int(totalCommits))
 
 	// Star and Fork metrics
 	stars := repoData.GetStargazersCount()
@@ -307,13 +307,6 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		})
 	}
 
-	// Provide context in description about top authors
-	if len(topAuthors) > 0 {
-		// In the future, we can add a specific "finding" or metadata about who the top authors are.
-		// For now, we leave this calculated but unused to avoid an empty branch lint error.
-		_ = topAuthors
-	}
-
 	return models.AnalyzerResult{
 		Name:     a.Name(),
 		Metrics:  metrics,
@@ -321,9 +314,9 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	}, nil
 }
 
-func calculateBusFactor(counts map[string]int, total int) (int, []string) {
+func calculateBusFactor(counts map[string]int, total int) int {
 	if total == 0 {
-		return 0, nil
+		return 0
 	}
 
 	type authorCount struct {
@@ -341,15 +334,13 @@ func calculateBusFactor(counts map[string]int, total int) (int, []string) {
 
 	accumulated := 0
 	busFactor := 0
-	var topAuthors []string
 
 	for _, ac := range sorted {
 		accumulated += ac.Count
 		busFactor++
-		topAuthors = append(topAuthors, ac.Name)
 		if float64(accumulated)/float64(total) >= 0.5 {
 			break
 		}
 	}
-	return busFactor, topAuthors
+	return busFactor
 }

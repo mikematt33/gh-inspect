@@ -19,7 +19,7 @@ Useful for personal portfolio reviews or analyzing open source contributions.
 
 Displays a progress bar during analysis. Use --quiet for CI/CD environments.`,
 	Example: `  gh-inspect user octocat
-  gh-inspect user octocat --deep
+  gh-inspect user octocat --depth=deep
   gh-inspect user octocat --quiet --format=json
   gh-inspect user octocat --include=activity,prflow,ci
   gh-inspect user octocat --filter-language=javascript
@@ -137,24 +137,19 @@ func runUserAnalysis(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Resolve output mode: flag overrides config, config overrides default
-	resolvedOutputMode := "observational" // default
-	if flagOutputMode != "" {
-		resolvedOutputMode = flagOutputMode
-	} else if cfg.Global.OutputMode != "" {
-		resolvedOutputMode = cfg.Global.OutputMode
-	}
+	// Resolve output mode: flag > config > default
+	outputMode := resolveOutputMode(cfg)
 
 	opts := AnalysisOptions{
 		Repos:           targetRepos,
-		Since:           flagSince, // Uses flags from root (or init above)
+		Since:           flagSince,
 		Depth:           flagDepth,
 		MaxPRs:          flagMaxPRs,
 		MaxIssues:       flagMaxIssues,
 		MaxWorkflowRuns: flagMaxWorkflowRuns,
 		Include:         flagInclude,
 		Exclude:         flagExclude,
-		OutputMode:      resolvedOutputMode,
+		OutputMode:      string(outputMode),
 	}
 
 	fullReport, err := pipelineRunner(opts)
@@ -164,16 +159,35 @@ func runUserAnalysis(cmd *cobra.Command, args []string) {
 	}
 
 	fullReport.Summary.TotalReposAnalyzed = len(targetRepos)
+	applyRemediationTracking(fullReport)
+	if _, _, err := handleBaselineFeatures(fullReport); err != nil {
+		fmt.Printf("\n❌ Failure: %v.\n", err)
+		os.Exit(1)
+	}
 
 	var renderer report.Renderer
-	if flagFormat == "json" {
+	switch flagFormat {
+	case "json":
 		renderer = &report.JSONRenderer{}
-	} else {
+	case "markdown":
+		renderer = &report.MarkdownRenderer{}
+	default:
 		renderer = &report.TextRenderer{}
 	}
 
-	if err := renderer.Render(fullReport, os.Stdout); err != nil {
+	renderOpts := report.RenderOptions{
+		ShowExplanation: flagExplain,
+		OutputMode:      outputMode,
+		SummaryMode:     flagSummary,
+	}
+
+	if err := renderer.RenderWithOptions(fullReport, os.Stdout, renderOpts); err != nil {
 		fmt.Printf("Error rendering report: %v\n", err)
+	}
+
+	// Write to file if --output-file specified
+	if flagOutputFile != "" {
+		writeOutputFile(fullReport, renderOpts)
 	}
 
 	if flagFail > 0 && fullReport.Summary.AvgHealthScore < float64(flagFail) {

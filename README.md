@@ -13,6 +13,8 @@
 - **Engineering Health Score**: Aggregates hundreds of data points into a single 0-100 score.
 - **Flexible Output Modes**: Choose between suggestive (prescriptive advice), observational (neutral facts), or statistical (numbers only) presentation.
 - **Baseline & Regression Detection**: Track score changes over time and detect regressions automatically.
+- **Baseline History & Trends**: Save timestamped snapshots and compare the current run against recent history.
+- **Remediation Tracking**: Assign stable finding IDs and track findings as open, in-progress, resolved, accepted, or ignored.
 - **Score Explanation**: Detailed breakdown showing why your score changed with improvement tips.
 - **Bus Factor Analysis**: Identifies if your project relies too heavily on single contributors.
 - **Code Quality Metrics**: Tracks code churn, review coverage, and review depth.
@@ -26,7 +28,6 @@
 - **Recommendations Engine**: Get actionable suggestions with explanations for every finding.
 - **GitHub Actions Integration**: Markdown output optimized for PR comments and Actions summaries.
 - **Repository Filtering**: Filter org/user scans by name, language, topics, and update date.
-- **Disk-based Caching**: Intelligent 24-hour cache reduces API calls by 30-50%.
 - **CI/CD Gates**: Use `--fail-under` to block merges if repository health drops below a certain threshold.
 
 ## 🛠️ Installation
@@ -66,7 +67,6 @@ make build
 - **Go Version**: 1.24.0 or higher
 - **GitHub Token**: Required for accessing GitHub API (5000 requests/hour with authentication)
 - **Rate Limit Considerations**: The tool includes smart API call optimization:
-  - Repository data caching (reduces duplicate calls by 2-3 per repo)
   - Time-windowed queries (only fetches data within analysis period)
   - Intelligent pagination limits (up to 5000 workflow runs, 1000 issues, etc.)
   - Pre-flight rate limit checks with warnings
@@ -142,36 +142,6 @@ The `auth logout` command intelligently:
 - Shows all found token locations
 - Removes tokens from config file and shell rc files automatically
 - Provides instructions for manual removal of environment variables and gh CLI tokens
-
-#### `cache` - Manage API Cache
-
-Manage the disk-based cache for GitHub API responses. The cache reduces API rate limit usage and speeds up repeated analyses.
-
-```bash
-# Show cache statistics
-gh-inspect cache stats
-
-# Clear all cached data
-gh-inspect cache clear
-
-# Show stats before clearing
-gh-inspect cache clear --stats
-```
-
-**Cache Details:**
-
-- **Location:** `~/.gh-inspect/cache`
-- **TTL:** 1 hour (automatically expires)
-- **Scope:** Repository metadata and static data
-- **Benefits:** Reduces API calls by 30-50% on repeated runs
-
-**Disable Cache:**
-
-Use `--no-cache` flag to bypass cache and force fresh API calls:
-
-```bash
-gh-inspect run owner/repo --no-cache
-```
 
 #### `compare` - Compare Repositories
 
@@ -272,7 +242,7 @@ gh-inspect org organization [flags]
 
 **Flags:**
 
-- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
+- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--compare-history`, `--fail-on-regression`, `--fail-under`, `--include`, `--exclude`, `--remediation-file`).
 - **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
 
 **Filtering Examples:**
@@ -313,11 +283,12 @@ gh-inspect run owner/repo [flags]
 - `--save-baseline`: Save this run as the new baseline.
 - `--compare-last`: Compare with last saved baseline.
 - `--fail-on-regression`: Exit with error if regression detected.
+- `--compare-history int`: Compare against the last N baseline snapshots and print a trend summary.
 - `--fail-under int`: Exit with error code 1 if average health score is below this value.
-- `--no-cache`: Disable API response caching (forces fresh API calls).
 - `--include strings`: Only run specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health,dependencies).
 - `--exclude strings`: Exclude specified analyzers (comma-separated: activity,prflow,ci,issues,security,releases,branches,health,dependencies).
 - `--list-analyzers`: List all available analyzers with descriptions and exit.
+- `--remediation-file string`: Path to remediation tracking file.
 
 **Global Flags:**
 
@@ -331,6 +302,23 @@ During analysis, a clean progress bar shows:
 - Current progress: `Analyzing repositories (5/10)`
 - Automatically clears when complete for clean output
 - Can be suppressed with `--quiet` flag for CI/CD pipelines
+
+#### `remediation`
+
+Track and update finding remediation state.
+
+```bash
+gh-inspect remediation list owner/repo
+gh-inspect remediation set-status <finding-id> in-progress --note="Assigned to platform team"
+```
+
+Supported remediation states:
+
+- `open`
+- `in-progress`
+- `resolved`
+- `accepted`
+- `ignored`
 
 #### `uninstall`
 
@@ -368,7 +356,7 @@ gh-inspect user username [flags]
 
 **Flags:**
 
-- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--fail-on-regression`, `--fail-under`, `--no-cache`, `--include`, `--exclude`).
+- Uses the same flags as `run` (`--depth`, `--max-prs`, `--max-issues`, `--max-workflow-runs`, `--format`, `--since`, `--explain`, `--baseline`, `--save-baseline`, `--compare-last`, `--compare-history`, `--fail-on-regression`, `--fail-under`, `--include`, `--exclude`, `--remediation-file`).
 - **Repository Filtering:** `--filter-name`, `--filter-language`, `--filter-topics`, `--filter-updated`, `--filter-skip-forks`
 
 ### Examples
@@ -422,6 +410,9 @@ gh-inspect run owner/repo --save-baseline
 # Later runs - compare against baseline
 gh-inspect run owner/repo --compare-last
 
+# Compare against the latest 5 snapshots and print a trend summary
+gh-inspect run owner/repo --compare-history=5
+
 # Fail CI if score dropped
 gh-inspect run owner/repo --compare-last --fail-on-regression
 
@@ -430,6 +421,10 @@ gh-inspect run owner/repo --save-baseline --baseline=./baseline-prod.json
 
 # Compare against specific baseline
 gh-inspect run owner/repo --baseline=./baseline-prod.json
+
+# Save latest baseline and a timestamped historical snapshot
+# Snapshots are stored next to the baseline in a *-history directory
+gh-inspect run owner/repo --save-baseline --baseline=./baseline-prod.json
 ```
 
 **Markdown Output for GitHub Actions**
@@ -504,27 +499,6 @@ Skip analyzers you don't need to save API rate limits and time.
 gh-inspect run owner/repo --exclude=releases,branches
 ```
 
-**Use Caching for Faster Repeated Runs**
-The cache automatically stores API responses for 1 hour.
-
-```bash
-# First run (fetches from API)
-gh-inspect run owner/repo
-
-# Second run within 1 hour (uses cache - much faster!)
-gh-inspect run owner/repo
-
-# Force fresh data (bypass cache)
-gh-inspect run owner/repo --no-cache
-
-# View cache stats
-gh-inspect cache stats
-
-# Clear cache manually
-gh-inspect cache clear
-```
-
-**Repository Filtering (Org/User Commands)**
 Filter which repositories to analyze based on multiple criteria.
 
 ```bash
@@ -571,7 +545,7 @@ Use `gh-inspect` in your GitHub Actions workflows for automated repository healt
 
 Generate markdown reports with rich formatting, suitable for PR comments and GitHub summaries:
 
-- **Score badges** with color-coded emojis (🟢 90+, 🟡 70-89, 🟠 50-69, 🔴 <50)
+- **Score badges** with color-coded emojis (🟢 90+, 🟡 75-89, 🟠 50-74, 🔴 <50)
 - **Collapsible findings** grouped by analyzer for easy navigation
 - **Detailed explanations** for each finding with "Why this matters"
 - **Actionable suggestions** with numbered steps for improvement
@@ -648,6 +622,21 @@ jobs:
 ```
 
 See the complete [example workflow](.github/workflows/health-check.yml) for more details.
+
+## 🚀 Enterprise Scaling & Rate Limiting
+
+`gh-inspect` is designed to be highly adaptable, scaling effortlessly from analyzing a single repository to thousands of repositories across enterprise organizations.
+
+### Concurrency Controls
+
+When analyzing organizations that have hundreds or thousands of repositories, the CLI regulates API pressure and memory usage using worker pools governed by a concurrency limit.
+By default, concurrency is set to `5`. This limit can be adjusted in the `config.yaml` using the `global.concurrency` field. For massive organizations with high token throughput, significantly increasing this limit can speed up processing pipelines safely without risking local memory starvation.
+
+### Multi-Token Round-Robin Support
+
+Running heavy inspections over large organizations can frequently strike the GitHub REST/GraphQL API rate limits. To aggressively combat API starvation, `gh-inspect` employs token splitting:
+You can provide an array of comma-separated tokens via the `GITHUB_TOKENS` environment variable (e.g. `GITHUB_TOKENS="tokenA,tokenB,tokenC"`).
+Under the hood, `gh-inspect` internally provisions a thread-safe round-robin rotator that automatically distributes outgoing requests sequentially across all supplied tokens—drastically extending the total number of allowed API calls across multiple identities before hitting block thresholds.
 
 ## ⚙️ Configuration
 
@@ -990,19 +979,6 @@ gh-inspect run owner/repo --depth=deep --max-workflow-runs=200
 ```
 
 **Disk-Based Caching:**
-
-- 24-hour TTL reduces API calls by 30-50% on repeated runs
-- Automatic cache invalidation after expiration
-- Stores repository metadata and static data
-- Location: `~/.gh-inspect/cache`
-- Bypass with `--no-cache` flag
-
-**Repository Data Caching:**
-
-- Repository metadata is cached in-memory per session
-- Reduces duplicate API calls when multiple analyzers need the same data
-- Saves 2-3 API calls per repository analyzed
-
 **Time-Windowed Queries:**
 
 - Only fetches data within the specified analysis period (default: 30 days)

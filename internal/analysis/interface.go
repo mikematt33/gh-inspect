@@ -42,7 +42,7 @@ type Client interface {
 	GetCombinedStatus(ctx context.Context, owner, repo, ref string) (*github.CombinedStatus, error)
 
 	// Tier 3 additions
-	GetIssues(ctx context.Context, owner, repo string, opts *github.IssueListByRepoOptions) ([]*github.Issue, error)
+	GetIssues(ctx context.Context, owner, repo string, opts *github.IssueListByRepoOptions) ([]*github.Issue, *github.Response, error)
 	GetIssueComments(ctx context.Context, owner, repo string, number int, opts *github.IssueListCommentsOptions) ([]*github.IssueComment, error)
 
 	// Tier 4 additions

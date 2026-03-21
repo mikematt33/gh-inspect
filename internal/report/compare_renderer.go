@@ -11,6 +11,8 @@ import (
 
 type ComparisonTextRenderer struct{}
 
+type metricLookup map[string]map[string]string
+
 func (r *ComparisonTextRenderer) Render(report *models.Report, w io.Writer) error {
 	return r.RenderWithOptions(report, w, RenderOptions{})
 }
@@ -48,6 +50,10 @@ func (r *ComparisonTextRenderer) RenderWithOptions(report *models.Report, w io.W
 	// simple way: assume all repos have same analyzers/metrics orders (mostly true for this CLI)
 	// We'll use the first repo as the template for rows
 	primaryRepo := report.Repositories[0]
+	repoMetrics := make([]metricLookup, len(report.Repositories))
+	for i, repo := range report.Repositories {
+		repoMetrics[i] = buildMetricLookup(repo)
+	}
 
 	for _, az := range primaryRepo.Analyzers {
 		// Section Header
@@ -60,27 +66,11 @@ func (r *ComparisonTextRenderer) RenderWithOptions(report *models.Report, w io.W
 		for _, m := range az.Metrics {
 			_, _ = fmt.Fprintf(tw, "  %s\t", m.Key)
 
-			// For each repo, find this metric
-			for _, repo := range report.Repositories {
+			for _, repoLookup := range repoMetrics {
 				val := "-"
-				// specific analyzer search
-				var targetAz *models.AnalyzerResult
-				for _, rAz := range repo.Analyzers {
-					if rAz.Name == az.Name {
-						targetAz = &rAz
-						break
-					}
-				}
-
-				if targetAz != nil {
-					for _, tm := range targetAz.Metrics {
-						if tm.Key == m.Key {
-							val = tm.DisplayValue
-							if val == "" {
-								val = fmt.Sprintf("%.2f", tm.Value)
-							}
-							break
-						}
+				if analyzerMetrics, ok := repoLookup[az.Name]; ok {
+					if metricValue, ok := analyzerMetrics[m.Key]; ok {
+						val = metricValue
 					}
 				}
 				_, _ = fmt.Fprintf(tw, "%s\t", val)
@@ -92,4 +82,20 @@ func (r *ComparisonTextRenderer) RenderWithOptions(report *models.Report, w io.W
 	}
 
 	return tw.Flush()
+}
+
+func buildMetricLookup(repo models.RepoResult) metricLookup {
+	lookup := make(metricLookup, len(repo.Analyzers))
+	for _, analyzer := range repo.Analyzers {
+		metrics := make(map[string]string, len(analyzer.Metrics))
+		for _, metric := range analyzer.Metrics {
+			value := metric.DisplayValue
+			if value == "" {
+				value = fmt.Sprintf("%.2f", metric.Value)
+			}
+			metrics[metric.Key] = value
+		}
+		lookup[analyzer.Name] = metrics
+	}
+	return lookup
 }

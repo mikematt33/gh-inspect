@@ -28,8 +28,8 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 	_, _ = fmt.Fprintln(w, "")
 
 	for _, repo := range report.Repositories {
-		// Calculate score first
-		engScore := insights.CalculateEngineeringHealthScore(repo)
+		evaluation := insights.EvaluateRepository(repo, opts.OutputMode, opts.ShowExplanation)
+		engScore := evaluation.Score
 		scoreEmoji := getScoreEmoji(engScore)
 
 		_, _ = fmt.Fprintf(w, "### %s %s\n", scoreEmoji, repo.Name)
@@ -37,11 +37,7 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 
 		// Show score breakdown if requested
 		if opts.ShowExplanation {
-			outputMode := opts.OutputMode
-			if outputMode == "" {
-				outputMode = models.OutputModeObservational
-			}
-			r.renderScoreBreakdown(repo, engScore, w, outputMode)
+			r.renderScoreBreakdown(evaluation.Components, engScore, w)
 		}
 
 		// Key Metrics Summary
@@ -98,7 +94,14 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 						default:
 							infoCount++
 						}
-						_, _ = fmt.Fprintf(w, "- %s **%s:** %s\n", icon, f.Type, f.Message)
+						status := ""
+						if f.TrackingID != "" {
+							status = fmt.Sprintf(" `[%s|%s]`", f.TrackingID, f.RemediationState)
+						}
+						_, _ = fmt.Fprintf(w, "- %s **%s**%s: %s\n", icon, f.Type, status, f.Message)
+						if f.RemediationNote != "" {
+							_, _ = fmt.Fprintf(w, "  - *Note:* %s\n", f.RemediationNote)
+						}
 
 						// Show explanation if available
 						if f.Explanation != "" {
@@ -134,11 +137,7 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 		}
 
 		// Insights
-		outputMode := opts.OutputMode
-		if outputMode == "" {
-			outputMode = models.OutputModeObservational // default
-		}
-		repoInsights := insights.GenerateInsights(repo, outputMode)
+		repoInsights := evaluation.Insights
 		if len(repoInsights) > 0 {
 			_, _ = fmt.Fprintln(w, "#### 💡 Recommendations")
 			_, _ = fmt.Fprintln(w, "")
@@ -186,6 +185,13 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 		if report.Summary.AvgCISuccessRate > 0 {
 			_, _ = fmt.Fprintf(w, "| Average CI Success Rate | %.1f%% |\n", report.Summary.AvgCISuccessRate)
 		}
+		if report.Summary.RemediationOpen+report.Summary.RemediationInProgress+report.Summary.RemediationResolved+report.Summary.RemediationAccepted+report.Summary.RemediationIgnored > 0 {
+			_, _ = fmt.Fprintf(w, "| Remediation Open | %d |\n", report.Summary.RemediationOpen)
+			_, _ = fmt.Fprintf(w, "| Remediation In Progress | %d |\n", report.Summary.RemediationInProgress)
+			_, _ = fmt.Fprintf(w, "| Remediation Resolved | %d |\n", report.Summary.RemediationResolved)
+			_, _ = fmt.Fprintf(w, "| Remediation Accepted | %d |\n", report.Summary.RemediationAccepted)
+			_, _ = fmt.Fprintf(w, "| Remediation Ignored | %d |\n", report.Summary.RemediationIgnored)
+		}
 
 		_, _ = fmt.Fprintln(w, "")
 	}
@@ -197,11 +203,7 @@ func (r *MarkdownRenderer) RenderWithOptions(report *models.Report, w io.Writer,
 	return nil
 }
 
-func (r *MarkdownRenderer) renderScoreBreakdown(repo models.RepoResult, engScore int, w io.Writer, outputMode models.OutputMode) {
-	if outputMode == "" {
-		outputMode = models.OutputModeObservational // default
-	}
-	scoreComponents := insights.ExplainScore(repo, outputMode)
+func (r *MarkdownRenderer) renderScoreBreakdown(scoreComponents []insights.ScoreComponent, engScore int, w io.Writer) {
 	if len(scoreComponents) == 0 {
 		return
 	}
@@ -209,12 +211,17 @@ func (r *MarkdownRenderer) renderScoreBreakdown(repo models.RepoResult, engScore
 	_, _ = fmt.Fprintln(w, "<details>")
 	_, _ = fmt.Fprintln(w, "<summary><b>📊 Score Breakdown</b></summary>")
 	_, _ = fmt.Fprintln(w, "")
-	_, _ = fmt.Fprintln(w, "| Component | Current | Target | Impact | Tips |")
-	_, _ = fmt.Fprintln(w, "|-----------|---------|--------|--------|------|")
+	_, _ = fmt.Fprintln(w, "| Component | Score | Current | Target | Impact | Tips |")
+	_, _ = fmt.Fprintln(w, "|-----------|-------|---------|--------|--------|------|")
 
 	totalImpact := 0
 	for _, comp := range scoreComponents {
 		totalImpact += comp.Impact
+
+		earned := comp.MaxWeight - comp.Impact
+		if earned < 0 {
+			earned = 0
+		}
 
 		impactStr := "✓ OK"
 		if comp.Impact > 0 {
@@ -226,8 +233,9 @@ func (r *MarkdownRenderer) renderScoreBreakdown(repo models.RepoResult, engScore
 			tips = "-"
 		}
 
-		_, _ = fmt.Fprintf(w, "| %s | %s | %s | %s | %s |\n",
+		_, _ = fmt.Fprintf(w, "| %s | %d/%d | %s | %s | %s | %s |\n",
 			comp.Category,
+			earned, comp.MaxWeight,
 			comp.Current,
 			comp.Target,
 			impactStr,

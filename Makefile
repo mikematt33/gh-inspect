@@ -25,9 +25,20 @@ test:
 
 lint:
 	@echo "Running linters..."
-	@if [ ! -f ./bin/golangci-lint ]; then \
-		echo "Installing golangci-lint to ./bin..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./bin latest; \
+	@mkdir -p ./bin
+	@need_install=0; \
+	if [ ! -x ./bin/golangci-lint ]; then \
+		need_install=1; \
+	else \
+		lint_go_ver=$$(./bin/golangci-lint version 2>/dev/null | sed -n 's/.*built with go\([0-9]*\.[0-9]*\).*/\1/p'); \
+		host_go_ver=$$(go env GOVERSION | sed -n 's/go\([0-9]*\.[0-9]*\).*/\1/p'); \
+		if [ -z "$$lint_go_ver" ] || [ "$$lint_go_ver" != "$$host_go_ver" ]; then \
+			need_install=1; \
+		fi; \
+	fi; \
+	if [ $$need_install -eq 1 ]; then \
+		echo "Installing golangci-lint to ./bin with local Go toolchain..."; \
+		GOBIN=$$(pwd)/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest; \
 	fi
 	@./bin/golangci-lint run
 

@@ -49,7 +49,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	}
 
 	// Fetch with pagination limit
-	var openIssues []*github.Issue
+	openIssues := make([]*github.Issue, 0, maxIssues)
 	for len(openIssues) < maxIssues {
 		pageSize := maxIssues - len(openIssues)
 		if pageSize > 100 {
@@ -57,7 +57,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		}
 		openOpts.PerPage = pageSize
 
-		pageIssues, err := client.GetIssues(ctx, repo.Owner, repo.Name, openOpts)
+		pageIssues, resp, err := client.GetIssues(ctx, repo.Owner, repo.Name, openOpts)
 		if err != nil {
 			return models.AnalyzerResult{Name: a.Name()}, err
 		}
@@ -65,11 +65,15 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		if len(pageIssues) == 0 {
 			break
 		}
+		if len(pageIssues) > pageSize {
+			pageIssues = pageIssues[:pageSize]
+		}
 
 		openIssues = append(openIssues, pageIssues...)
-		if len(pageIssues) < pageSize {
+		if len(openIssues) >= maxIssues || resp == nil || resp.NextPage == 0 {
 			break
 		}
+		openOpts.Page = resp.NextPage
 	}
 
 	// 2. Fetch Recently Closed Issues (for throughput/lifetime)
@@ -80,7 +84,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		ListOptions: github.ListOptions{PerPage: 100},
 	}
 
-	var closedIssues []*github.Issue
+	closedIssues := make([]*github.Issue, 0, maxIssues)
 	for len(closedIssues) < maxIssues {
 		pageSize := maxIssues - len(closedIssues)
 		if pageSize > 100 {
@@ -88,7 +92,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		}
 		closedOpts.PerPage = pageSize
 
-		pageIssues, err := client.GetIssues(ctx, repo.Owner, repo.Name, closedOpts)
+		pageIssues, resp, err := client.GetIssues(ctx, repo.Owner, repo.Name, closedOpts)
 		if err != nil {
 			return models.AnalyzerResult{Name: a.Name()}, err
 		}
@@ -96,11 +100,15 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		if len(pageIssues) == 0 {
 			break
 		}
+		if len(pageIssues) > pageSize {
+			pageIssues = pageIssues[:pageSize]
+		}
 
 		closedIssues = append(closedIssues, pageIssues...)
-		if len(pageIssues) < pageSize {
+		if len(closedIssues) >= maxIssues || resp == nil || resp.NextPage == 0 {
 			break
 		}
+		closedOpts.Page = resp.NextPage
 	}
 
 	// 3. Calculate Metrics
@@ -262,9 +270,14 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	}
 
 	if len(findings) > 0 {
+		severityRank := map[models.Severity]int{
+			models.SeverityHigh:   0,
+			models.SeverityMedium: 1,
+			models.SeverityLow:    2,
+			models.SeverityInfo:   3,
+		}
 		sort.Slice(findings, func(i, j int) bool {
-			// sort by severity?
-			return findings[i].Severity == models.SeverityHigh // simple float up
+			return severityRank[findings[i].Severity] < severityRank[findings[j].Severity]
 		})
 	}
 

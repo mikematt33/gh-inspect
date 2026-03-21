@@ -60,7 +60,6 @@ func init() {
 	authCmd.AddCommand(authLogoutCmd)
 
 	// Add flags
-	authCmd.PersistentFlags().BoolVar(&flagNoBrowser, "no-browser", false, "Disable browser-based authentication (use device code flow)")
 	authLoginCmd.Flags().BoolVar(&flagNoBrowser, "no-browser", false, "Disable browser-based authentication (use device code flow)")
 }
 
@@ -80,7 +79,11 @@ func runAuth(cmd *cobra.Command, args []string) {
 		configToken = cfg.Global.GitHubToken
 	}
 
-	token := ghclient.ResolveToken(configToken)
+	tokens := ghclient.ResolveTokens(configToken)
+	var token string
+	if len(tokens) > 0 {
+		token = tokens[0]
+	}
 	if token != "" {
 		fmt.Println("✅ You are already authenticated!")
 		fmt.Println()
@@ -231,7 +234,7 @@ func loginWithToken() {
 // validateToken checks if a token is valid by making an API call
 // This is a variable to allow mocking in tests
 var validateToken = func(token string) error {
-	client := ghclient.NewClient(token)
+	client := ghclient.NewClient([]string{token})
 	_, err := client.GetRateLimit(context.Background())
 	return err
 }
@@ -475,7 +478,11 @@ func runAuthStatus(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	token := ghclient.ResolveToken(cfg.Global.GitHubToken)
+	tokens := ghclient.ResolveTokens(cfg.Global.GitHubToken)
+	var token string
+	if len(tokens) > 0 {
+		token = tokens[0]
+	}
 	if token == "" {
 		fmt.Println("❌ Not authenticated")
 		fmt.Println("\nRun 'gh-inspect auth' to log in.")
@@ -492,7 +499,7 @@ func runAuthStatus(cmd *cobra.Command, args []string) {
 	}
 
 	// Get rate limit info
-	client := ghclient.NewClient(token)
+	client := ghclient.NewClient([]string{token})
 	limits, err := client.GetRateLimit(context.Background())
 	if err != nil {
 		fmt.Println("✅ Authenticated (token is valid)")

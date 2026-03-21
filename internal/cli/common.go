@@ -22,6 +22,7 @@ import (
 	"github.com/mikematt33/gh-inspect/internal/analysis/analyzers/security"
 	"github.com/mikematt33/gh-inspect/internal/config"
 	ghclient "github.com/mikematt33/gh-inspect/internal/github"
+	"github.com/mikematt33/gh-inspect/pkg/insights"
 	"github.com/mikematt33/gh-inspect/pkg/models"
 	"github.com/schollz/progressbar/v3"
 )
@@ -30,11 +31,11 @@ import (
 // It attempts to resolve the token from configuration, environment, or gh CLI.
 // Returns an error if no valid token is found.
 func getClientWithToken(cfg *config.Config) (*ghclient.ClientWrapper, error) {
-	token := ghclient.ResolveToken(cfg.Global.GitHubToken)
-	if token == "" {
+	tokens := ghclient.ResolveTokens(cfg.Global.GitHubToken)
+	if len(tokens) == 0 {
 		return nil, fmt.Errorf("no GitHub token found. Please run 'gh-inspect auth' to login")
 	}
-	return ghclient.NewClient(token), nil
+	return ghclient.NewClient(tokens), nil
 }
 
 // AnalysisOptions contains the configuration for running repository analysis.
@@ -145,11 +146,11 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	}
 
 	// 3. Setup Dependencies
-	token := ghclient.ResolveToken(cfg.Global.GitHubToken)
-	if token == "" {
+	tokens := ghclient.ResolveTokens(cfg.Global.GitHubToken)
+	if len(tokens) == 0 {
 		return nil, fmt.Errorf("no GitHub token found. Please run 'gh-inspect auth' to login")
 	}
-	client := ghclient.NewClientWithCache(token, !flagNoCache)
+	client := ghclient.NewClient(tokens)
 
 	// Pre-flight check for rate limits
 	limits, err := client.GetRateLimit(context.Background())
@@ -214,6 +215,25 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 		analyzers = append(analyzers, dependencies.New())
 	}
 
+	// Warn about unknown names in --include so typos don't silently produce empty results
+	if len(opts.Include) > 0 {
+		known := map[string]bool{
+			"activity": true, "prflow": true, "pr-flow": true,
+			"ci": true, "issues": true, "issue-hygiene": true,
+			"security": true, "releases": true, "branches": true,
+			"dependencies": true, "health": true, "repo-health": true,
+		}
+		var unknown []string
+		for _, name := range opts.Include {
+			if !known[name] {
+				unknown = append(unknown, name)
+			}
+		}
+		if len(unknown) > 0 {
+			fmt.Fprintf(os.Stderr, "⚠️  WARNING: Unknown analyzer(s) in --include: %s\n   Valid names: activity, prflow/pr-flow, ci, issues/issue-hygiene, security, releases, branches, dependencies, health/repo-health\n", strings.Join(unknown, ", "))
+		}
+	}
+
 	start := time.Now()
 
 	// Setup context with cancellation support
@@ -243,9 +263,9 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	var completed int
 	totalRepos := len(opts.Repos)
 
-	// Create progress bar if not in quiet mode
+	// Create progress bar if not in quiet or verbose mode (verbose prints per-repo lines instead)
 	var bar *progressbar.ProgressBar
-	if shouldPrintInfo() {
+	if shouldPrintInfo() && !shouldPrintVerbose() {
 		bar = progressbar.NewOptions(totalRepos,
 			progressbar.OptionSetDescription("Analyzing repositories"),
 			progressbar.OptionSetWidth(40),
@@ -360,6 +380,13 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 	var countHealth, countCI, countCIRuntime, countPRCycle int
 
 	for _, r := range fullReport.Repositories {
+		engScore := insights.CalculateEngineeringHealthScore(r)
+		sumHealth += float64(engScore)
+		countHealth++
+		if engScore < 50 {
+			fullReport.Summary.ReposAtRisk++
+		}
+
 		for _, az := range r.Analyzers {
 			fullReport.Summary.IssuesFound += len(az.Findings)
 
@@ -371,12 +398,6 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 					fullReport.Summary.TotalOpenIssues += int(m.Value)
 				case "zombie_issues":
 					fullReport.Summary.TotalZombieIssues += int(m.Value)
-				case "health_score":
-					sumHealth += m.Value
-					countHealth++
-					if m.Value < 50.0 {
-						fullReport.Summary.ReposAtRisk++
-					}
 				case "success_rate":
 					sumCISuccess += m.Value
 					countCI++

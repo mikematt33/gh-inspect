@@ -43,7 +43,7 @@ func init() {
 }
 
 func runUpdate(cmd *cobra.Command, args []string) error {
-	fmt.Println("Checking for updates...")
+	fmt.Fprintln(os.Stderr, "Checking for updates...")
 	latest, err := getLatestRelease()
 	if err != nil {
 		return fmt.Errorf("failed to get latest release: %w", err)
@@ -54,21 +54,21 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	latestVer := strings.TrimPrefix(latest.TagName, "v")
 
 	if currentVer == latestVer {
-		fmt.Printf("You are already using the latest version: %s\n", Version)
+		fmt.Fprintf(os.Stderr, "You are already using the latest version: %s\n", Version)
 		return nil
 	}
 
-	fmt.Printf("Current version: %s\n", Version)
-	fmt.Printf("Latest version:  %s\n", latest.TagName)
+	fmt.Fprintf(os.Stderr, "Current version: %s\n", Version)
+	fmt.Fprintf(os.Stderr, "Latest version:  %s\n", latest.TagName)
 
 	// If check-only mode, just report and exit
 	if updateCheckOnly {
-		fmt.Println("\nA new version is available!")
-		fmt.Printf("Run 'gh-inspect update' to install %s\n", latest.TagName)
+		fmt.Fprintln(os.Stderr, "\nA new version is available!")
+		fmt.Fprintf(os.Stderr, "Run 'gh-inspect update' to install %s\n", latest.TagName)
 		return nil
 	}
 
-	fmt.Printf("\nUpdating to %s...\n", latest.TagName)
+	fmt.Fprintf(os.Stderr, "\nUpdating to %s...\n", latest.TagName)
 
 	if err := doUpdate(latest.TagName); err != nil {
 		return err
@@ -146,7 +146,7 @@ func doUpdate(version string) error {
 	downloadUrl := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", owner, repo, version, assetName)
 	checksumUrl := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", owner, repo, version, checksumFile)
 
-	fmt.Printf("Downloading %s...\n", downloadUrl)
+	fmt.Fprintf(os.Stderr, "Downloading %s...\n", downloadUrl)
 
 	// Create temp dir for download
 	tmpDir, err := os.MkdirTemp("", "gh-inspect-update")
@@ -156,7 +156,7 @@ func doUpdate(version string) error {
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Download checksums file
-	fmt.Println("Downloading checksums...")
+	fmt.Fprintln(os.Stderr, "Downloading checksums...")
 	checksums, err := downloadChecksums(checksumUrl)
 	if err != nil {
 		return fmt.Errorf("failed to download checksums: %w", err)
@@ -174,7 +174,7 @@ func doUpdate(version string) error {
 	}
 
 	// Verify checksum
-	fmt.Println("Verifying checksum...")
+	fmt.Fprintln(os.Stderr, "Verifying checksum...")
 	actualChecksum, err := calculateSHA256(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to calculate checksum: %w", err)

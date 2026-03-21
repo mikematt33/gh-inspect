@@ -381,17 +381,36 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 	var findings []models.Finding
 	now := time.Now()
 
+	var stalePRs []*github.PullRequest
 	for _, pr := range openPRs {
 		if pr.UpdatedAt == nil {
 			continue
 		}
 		daysSinceUpdate := now.Sub(pr.UpdatedAt.Time).Hours() / 24
-
 		if int(daysSinceUpdate) > a.StaleThresholdDays {
+			stalePRs = append(stalePRs, pr)
+		}
+	}
+
+	if len(stalePRs) > 0 {
+		metrics = append(metrics, models.Metric{
+			Key:          "stale_prs",
+			Value:        float64(len(stalePRs)),
+			Unit:         "count",
+			DisplayValue: fmt.Sprintf("%d", len(stalePRs)),
+			Description:  fmt.Sprintf("Open PRs inactive for > %d days", a.StaleThresholdDays),
+		})
+
+		// Cap individual findings at 5 to avoid noise; full count is in the metric above
+		shown := stalePRs
+		if len(shown) > 5 {
+			shown = shown[:5]
+		}
+		for _, pr := range shown {
 			findings = append(findings, models.Finding{
 				Type:        "stale_pr",
 				Severity:    models.SeverityMedium,
-				Message:     fmt.Sprintf("PR has been inactive for > %d days", a.StaleThresholdDays),
+				Message:     fmt.Sprintf("PR #%d '%s' inactive for > %d days", pr.GetNumber(), pr.GetTitle(), a.StaleThresholdDays),
 				Location:    pr.GetHTMLURL(),
 				Actionable:  true,
 				Remediation: "Ping the reviewer or close the PR.",

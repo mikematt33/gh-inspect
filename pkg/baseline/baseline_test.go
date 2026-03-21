@@ -87,6 +87,37 @@ func TestSaveAndLoad(t *testing.T) {
 	}
 }
 
+func TestSaveWithHistoryAndTrend(t *testing.T) {
+	tmpDir := t.TempDir()
+	baselinePath := filepath.Join(tmpDir, "baseline.json")
+
+	if _, err := SaveWithHistory(createTestReport(80, 90, 3, 10), baselinePath); err != nil {
+		t.Fatalf("first SaveWithHistory failed: %v", err)
+	}
+	if _, err := SaveWithHistory(createTestReport(85, 95, 2, 8), baselinePath); err != nil {
+		t.Fatalf("second SaveWithHistory failed: %v", err)
+	}
+
+	history, err := LoadHistory(baselinePath, 2)
+	if err != nil {
+		t.Fatalf("LoadHistory failed: %v", err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("expected 2 history snapshots, got %d", len(history))
+	}
+
+	trend := ComputeTrend(createTestReport(90, 98, 1.5, 6), history)
+	if trend == nil {
+		t.Fatal("expected trend summary")
+	}
+	if trend.HealthScoreDelta != 10 {
+		t.Fatalf("expected health delta 10, got %v", trend.HealthScoreDelta)
+	}
+	if len(trend.Points) != 3 {
+		t.Fatalf("expected 3 trend points, got %d", len(trend.Points))
+	}
+}
+
 func TestLoadNonExistent(t *testing.T) {
 	_, err := Load("/nonexistent/path/baseline.json")
 	if err == nil {

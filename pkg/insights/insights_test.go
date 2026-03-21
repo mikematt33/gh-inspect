@@ -127,19 +127,17 @@ func TestCalculateEngineeringHealthScore(t *testing.T) {
 						Findings: []models.Finding{
 							{Type: "missing_file"}, {Type: "missing_file"}, {Type: "missing_file"}, {Type: "missing_file"},
 							{Type: "missing_file"}, {Type: "missing_file"},
-						}, // -20 (max for files is implicit? code says float64(missing * 5))
-						// Logic: 6 files * 5 = 30.
+						}, // -20 (capped at 20: 6 * 5 = 30, capped to 20)
 					},
 					{
 						Name: "pr-flow",
-						Findings: []models.Finding{
-							{Type: "stale_pr"}, {Type: "stale_pr"}, {Type: "stale_pr"},
-							{Type: "stale_pr"}, {Type: "stale_pr"}, {Type: "stale_pr"},
+						Metrics: []models.Metric{
+							{Key: "stale_prs", Value: 6},
 						}, // -15 (>5 stale PRs)
 					},
 				},
 			},
-			// Total deducting: 30 + 20 + 15 + 30 + 15 = 110.
+			// Total deducting: 30 + 20 + 15 + 20 + 15 = 100.
 			// Result should be 0.
 			expected: 0,
 		},
@@ -197,6 +195,39 @@ func TestGenerateInsights(t *testing.T) {
 	}
 	if !foundSlowPR {
 		t.Error("Missing Slow PR insight")
+	}
+}
+
+func TestEvaluateRepositoryMatchesLegacyFunctions(t *testing.T) {
+	repo := models.RepoResult{
+		Analyzers: []models.AnalyzerResult{
+			{
+				Name:    "ci",
+				Metrics: []models.Metric{{Key: "success_rate", Value: 40.0}},
+			},
+			{
+				Name: "activity",
+				Metrics: []models.Metric{
+					{Key: "bus_factor", Value: 1},
+					{Key: "active_contributors", Value: 4},
+				},
+			},
+			{
+				Name:     "repo-health",
+				Findings: []models.Finding{{Type: "missing_file", Message: "Missing key file: README.md"}},
+			},
+		},
+	}
+
+	evaluation := EvaluateRepository(repo, models.OutputModeObservational, true)
+	if evaluation.Score != CalculateEngineeringHealthScore(repo) {
+		t.Fatalf("expected score %d, got %d", CalculateEngineeringHealthScore(repo), evaluation.Score)
+	}
+	if len(evaluation.Insights) != len(GenerateInsights(repo, models.OutputModeObservational)) {
+		t.Fatalf("expected %d insights, got %d", len(GenerateInsights(repo, models.OutputModeObservational)), len(evaluation.Insights))
+	}
+	if len(evaluation.Components) != len(ExplainScore(repo, models.OutputModeObservational)) {
+		t.Fatalf("expected %d components, got %d", len(ExplainScore(repo, models.OutputModeObservational)), len(evaluation.Components))
 	}
 }
 
@@ -509,19 +540,13 @@ func TestExplainScore_StalePRs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var findings []models.Finding
-			for i := 0; i < tt.staleCount; i++ {
-				findings = append(findings, models.Finding{
-					Type:    "stale_pr",
-					Message: "Stale PR",
-				})
-			}
-
 			repo := models.RepoResult{
 				Analyzers: []models.AnalyzerResult{
 					{
-						Name:     "pr-flow",
-						Findings: findings,
+						Name: "pr-flow",
+						Metrics: []models.Metric{
+							{Key: "stale_prs", Value: float64(tt.staleCount)},
+						},
 					},
 				},
 			}
@@ -581,13 +606,8 @@ func TestExplainScore_MultipleComponents(t *testing.T) {
 			},
 			{
 				Name: "pr-flow",
-				Findings: []models.Finding{
-					{Type: "stale_pr"},
-					{Type: "stale_pr"},
-					{Type: "stale_pr"},
-					{Type: "stale_pr"},
-					{Type: "stale_pr"},
-					{Type: "stale_pr"}, // -15
+				Metrics: []models.Metric{
+					{Key: "stale_prs", Value: 6}, // -15
 				},
 			},
 		},

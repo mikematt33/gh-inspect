@@ -3,10 +3,10 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/mikematt33/gh-inspect/internal/config"
 	"github.com/mikematt33/gh-inspect/internal/report"
-	"github.com/mikematt33/gh-inspect/pkg/baseline"
 	"github.com/mikematt33/gh-inspect/pkg/models"
 	"github.com/spf13/cobra"
 )
@@ -40,7 +40,6 @@ Use --quiet to suppress progress output or --verbose for detailed information.`,
   gh-inspect run owner/repo --format=json > report.json
   gh-inspect run owner/repo --format=markdown --explain
   gh-inspect run owner/repo --quiet --fail-under=80
-  gh-inspect run owner/repo --no-cache
   gh-inspect run owner/repo --include=activity,ci,security
   gh-inspect run owner/repo --exclude=branches,releases
   gh-inspect run owner/repo --depth=shallow --max-prs=25
@@ -98,8 +97,11 @@ var (
 	flagBaseline         string
 	flagSaveBaseline     bool
 	flagExplain          bool
-	flagNoCache          bool
 	flagOutputMode       string
+	flagSummary          bool
+	flagOutputFile       string
+	flagCompareHistory   int
+	flagRemediationFile  string
 	// Filtering flags
 	flagFilterName      string
 	flagFilterLanguage  []string
@@ -169,18 +171,25 @@ func registerAnalysisFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&flagBaseline, "baseline", "", "Path to baseline file to compare against")
 	cmd.Flags().BoolVar(&flagSaveBaseline, "save-baseline", false, "Save this run as the new baseline")
 	cmd.Flags().BoolVar(&flagFailOnRegression, "fail-on-regression", false, "Exit with error if regression detected")
+	cmd.Flags().IntVar(&flagCompareHistory, "compare-history", 0, "Compare against the last N baseline snapshots and print a trend summary")
 
 	// Scoring transparency
 	cmd.Flags().BoolVar(&flagExplain, "explain", false, "Show detailed score breakdown and improvement tips")
 
 	// Output mode (how findings are presented)
-	cmd.Flags().StringVar(&flagOutputMode, "output-mode", "observational", "Output mode: suggestive (prescriptive advice), observational (neutral facts, default), statistical (numbers only)")
+	cmd.Flags().StringVar(&flagOutputMode, "output-mode", "", "Output mode: suggestive (prescriptive advice), observational (neutral facts, default), statistical (numbers only). Defaults to global.output_mode in config, or observational.")
 	_ = cmd.RegisterFlagCompletionFunc("output-mode", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{"suggestive", "observational", "statistical"}, cobra.ShellCompDirectiveNoFileComp
 	})
 
+	// Summary mode
+	cmd.Flags().BoolVar(&flagSummary, "summary", false, "Compact output: score + high/medium findings only")
+
+	// Output file (write to file while still printing to terminal)
+	cmd.Flags().StringVar(&flagOutputFile, "output-file", "", "Write report to file (e.g. report.json) while still printing to terminal")
+	cmd.Flags().StringVar(&flagRemediationFile, "remediation-file", "", "Path to remediation tracking file")
+
 	// Caching
-	cmd.Flags().BoolVar(&flagNoCache, "no-cache", false, "Disable API response caching (forces fresh API calls)")
 }
 
 // registerFilterFlags adds repository filtering flags (for org and user commands)
@@ -248,6 +257,23 @@ func init() {
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(compareCmd)
 	registerAnalysisFlags(runCmd)
+	registerAnalysisFlags(compareCmd)
+}
+
+// resolveOutputMode resolves the effective output mode from the flag, config, and default.
+func resolveOutputMode(cfg *config.Config) models.OutputMode {
+	mode := flagOutputMode
+	if mode == "" {
+		mode = cfg.Global.OutputMode
+	}
+	switch mode {
+	case "suggestive":
+		return models.OutputModeSuggestive
+	case "statistical":
+		return models.OutputModeStatistical
+	default:
+		return models.OutputModeObservational
+	}
 }
 
 func runAnalysis(cmd *cobra.Command, args []string) {
@@ -263,15 +289,8 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Resolve output mode: flag overrides config, config overrides default
-	resolvedOutputMode := "observational" // default
-	if flagOutputMode != "" {
-		// Flag explicitly set - use it (override config)
-		resolvedOutputMode = flagOutputMode
-	} else if cfg.Global.OutputMode != "" {
-		// Config has a value - use it
-		resolvedOutputMode = cfg.Global.OutputMode
-	}
+	// Resolve output mode: flag > config > default
+	outputMode := resolveOutputMode(cfg)
 
 	opts := AnalysisOptions{
 		Repos:           args,
@@ -282,7 +301,7 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 		MaxWorkflowRuns: flagMaxWorkflowRuns,
 		Include:         flagInclude,
 		Exclude:         flagExclude,
-		OutputMode:      resolvedOutputMode,
+		OutputMode:      string(outputMode),
 	}
 
 	fullReport, err := pipelineRunner(opts)
@@ -291,40 +310,10 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Handle baseline comparison if requested
-	var comparison *baseline.ComparisonResult
-	if flagCompareLast || flagBaseline != "" {
-		baselinePath := flagBaseline
-		if baselinePath == "" {
-			baselinePath = baseline.GetDefaultBaselinePath()
-		}
-
-		previousBaseline, err := baseline.Load(baselinePath)
-		if err != nil {
-			if shouldPrintInfo() {
-				fmt.Printf("⚠️  Could not load baseline for comparison: %v\n", err)
-			}
-		} else {
-			comparison = baseline.Compare(fullReport, previousBaseline)
-			if shouldPrintInfo() {
-				printComparison(comparison)
-			}
-
-			if flagFailOnRegression && comparison != nil && comparison.Summary.HasRegression {
-				fmt.Printf("\n❌ Failure: Regression detected compared to baseline.\n")
-				os.Exit(1)
-			}
-		}
-	}
-
-	// Save baseline if requested
-	if flagSaveBaseline {
-		baselinePath := baseline.GetDefaultBaselinePath()
-		if err := baseline.Save(fullReport, baselinePath); err != nil {
-			fmt.Printf("⚠️  Failed to save baseline: %v\n", err)
-		} else if shouldPrintInfo() {
-			fmt.Printf("\n✅ Baseline saved to %s\n", baselinePath)
-		}
+	applyRemediationTracking(fullReport)
+	if _, _, err := handleBaselineFeatures(fullReport); err != nil {
+		fmt.Printf("\n❌ Failure: %v.\n", err)
+		os.Exit(1)
 	}
 
 	// 4. Render Output
@@ -338,24 +327,19 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 		renderer = &report.TextRenderer{}
 	}
 
-	// Parse output mode from the already-resolved value (respects flag > config > default)
-	outputMode := models.OutputModeObservational // default
-	switch resolvedOutputMode {
-	case "suggestive":
-		outputMode = models.OutputModeSuggestive
-	case "observational", "":
-		outputMode = models.OutputModeObservational
-	case "statistical":
-		outputMode = models.OutputModeStatistical
-	}
-
 	renderOpts := report.RenderOptions{
 		ShowExplanation: flagExplain,
 		OutputMode:      outputMode,
+		SummaryMode:     flagSummary,
 	}
 
 	if err := renderer.RenderWithOptions(fullReport, os.Stdout, renderOpts); err != nil {
 		fmt.Printf("Error rendering report: %v\n", err)
+	}
+
+	// Write to file if --output-file specified
+	if flagOutputFile != "" {
+		writeOutputFile(fullReport, renderOpts)
 	}
 
 	// Write to GitHub Actions Step Summary if running in GitHub Actions
@@ -372,8 +356,40 @@ func runAnalysis(cmd *cobra.Command, args []string) {
 
 	// Exit Code Check for health score
 	if flagFail > 0 && fullReport.Summary.AvgHealthScore < float64(flagFail) {
-
-		fmt.Printf("\n❌ Failure: Health score is below the --fail-under threshold.\n")
+		fmt.Printf("\n❌ Failure: Health score (%.1f) is below the --fail-under threshold (%d).\n", fullReport.Summary.AvgHealthScore, flagFail)
 		os.Exit(1)
+	}
+}
+
+// writeOutputFile writes the report to flagOutputFile, auto-detecting format from extension.
+func writeOutputFile(fullReport *models.Report, renderOpts report.RenderOptions) {
+	fileFormat := report.FormatText
+	if strings.HasSuffix(flagOutputFile, ".json") {
+		fileFormat = report.FormatJSON
+	} else if strings.HasSuffix(flagOutputFile, ".md") {
+		fileFormat = report.FormatMarkdown
+	}
+
+	var fileRenderer report.Renderer
+	switch fileFormat {
+	case report.FormatJSON:
+		fileRenderer = &report.JSONRenderer{}
+	case report.FormatMarkdown:
+		fileRenderer = &report.MarkdownRenderer{}
+	default:
+		fileRenderer = &report.TextRenderer{}
+	}
+
+	f, err := os.Create(flagOutputFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating output file: %v\n", err)
+		return
+	}
+	defer func() { _ = f.Close() }()
+
+	if err := fileRenderer.RenderWithOptions(fullReport, f, renderOpts); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing output file: %v\n", err)
+	} else if shouldPrintInfo() {
+		fmt.Fprintf(os.Stderr, "\n✅ Report written to %s\n", flagOutputFile)
 	}
 }

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/mikematt33/gh-inspect/pkg/models"
-	"github.com/mikematt33/gh-inspect/pkg/util"
 )
 
 // Baseline stores a historical report for comparison
@@ -61,20 +61,61 @@ type ComparisonSummary struct {
 	TotalDegradedMetrics int     `json:"total_degraded_metrics"`
 }
 
-// Save persists a report as a baseline
+type TrendPoint struct {
+	Timestamp      time.Time `json:"timestamp"`
+	AvgHealthScore float64   `json:"avg_health_score"`
+	AvgCISuccess   float64   `json:"avg_ci_success_rate"`
+	AvgPRCycleTime float64   `json:"avg_pr_cycle_time"`
+	IssuesFound    int       `json:"issues_found"`
+	ReposAnalyzed  int       `json:"repos_analyzed"`
+}
+
+type TrendSummary struct {
+	Points             []TrendPoint `json:"points"`
+	ComparedSnapshots  int          `json:"compared_snapshots"`
+	HealthScoreDelta   float64      `json:"health_score_delta"`
+	CISuccessRateDelta float64      `json:"ci_success_rate_delta"`
+	PRCycleTimeDelta   float64      `json:"pr_cycle_time_delta"`
+	IssuesFoundDelta   int          `json:"issues_found_delta"`
+}
+
+// Save persists a report as a baseline and creates a historical snapshot.
 func Save(report *models.Report, path string) error {
+	_, err := SaveWithHistory(report, path)
+	return err
+}
+
+// SaveWithHistory persists the latest baseline and a timestamped historical snapshot.
+func SaveWithHistory(report *models.Report, path string) (string, error) {
 	baseline := Baseline{
 		Timestamp: time.Now(),
 		Report:    report,
 	}
 
+	if err := writeBaseline(&baseline, path); err != nil {
+		return "", err
+	}
+
+	historyDir := GetHistoryDir(path)
+	if err := os.MkdirAll(historyDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create baseline history directory: %w", err)
+	}
+
+	snapshotPath := filepath.Join(historyDir, fmt.Sprintf("baseline-%s.json", baseline.Timestamp.UTC().Format("20060102-150405.000000000")))
+	if err := writeBaseline(&baseline, snapshotPath); err != nil {
+		return "", err
+	}
+
+	return snapshotPath, nil
+}
+
+func writeBaseline(baseline *Baseline, path string) error {
 	// Ensure directory exists
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create baseline directory: %w", err)
 	}
 
-	// Write to file
 	data, err := json.MarshalIndent(baseline, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal baseline: %w", err)
@@ -100,6 +141,86 @@ func Load(path string) (*Baseline, error) {
 	}
 
 	return &baseline, nil
+}
+
+func GetHistoryDir(path string) string {
+	dir := filepath.Dir(path)
+	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	if base == "" {
+		base = "baseline"
+	}
+	return filepath.Join(dir, base+"-history")
+}
+
+func LoadHistory(path string, limit int) ([]*Baseline, error) {
+	historyDir := GetHistoryDir(path)
+	entries, err := os.ReadDir(historyDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read baseline history: %w", err)
+	}
+
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		paths = append(paths, filepath.Join(historyDir, entry.Name()))
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(paths)))
+	if limit > 0 && len(paths) > limit {
+		paths = paths[:limit]
+	}
+
+	history := make([]*Baseline, 0, len(paths))
+	for _, path := range paths {
+		baseline, err := Load(path)
+		if err != nil {
+			return nil, err
+		}
+		history = append(history, baseline)
+	}
+	return history, nil
+}
+
+func ComputeTrend(current *models.Report, history []*Baseline) *TrendSummary {
+	if current == nil || len(history) == 0 {
+		return nil
+	}
+
+	points := make([]TrendPoint, 0, len(history)+1)
+	for i := len(history) - 1; i >= 0; i-- {
+		baseline := history[i]
+		if baseline == nil || baseline.Report == nil {
+			continue
+		}
+		points = append(points, trendPointFromReport(baseline.Timestamp, baseline.Report))
+	}
+	points = append(points, trendPointFromReport(current.Meta.GeneratedAt, current))
+
+	base := points[0]
+	latest := points[len(points)-1]
+	return &TrendSummary{
+		Points:             points,
+		ComparedSnapshots:  len(points) - 1,
+		HealthScoreDelta:   latest.AvgHealthScore - base.AvgHealthScore,
+		CISuccessRateDelta: latest.AvgCISuccess - base.AvgCISuccess,
+		PRCycleTimeDelta:   latest.AvgPRCycleTime - base.AvgPRCycleTime,
+		IssuesFoundDelta:   latest.IssuesFound - base.IssuesFound,
+	}
+}
+
+func trendPointFromReport(timestamp time.Time, report *models.Report) TrendPoint {
+	return TrendPoint{
+		Timestamp:      timestamp,
+		AvgHealthScore: report.Summary.AvgHealthScore,
+		AvgCISuccess:   report.Summary.AvgCISuccessRate,
+		AvgPRCycleTime: report.Summary.AvgPRCycleTime,
+		IssuesFound:    report.Summary.IssuesFound,
+		ReposAnalyzed:  report.Summary.TotalReposAnalyzed,
+	}
 }
 
 // Compare generates a comparison between current and previous reports
@@ -189,9 +310,9 @@ func compareRepository(current, previous *models.RepoResult) RepositoryDelta {
 	prevFindings := countFindings(previous)
 
 	delta.FindingDiff = FindingChange{
-		Added:     util.Max(0, currFindings-prevFindings),
-		Removed:   util.Max(0, prevFindings-currFindings),
-		Unchanged: util.Min(currFindings, prevFindings),
+		Added:     max(0, currFindings-prevFindings),
+		Removed:   max(0, prevFindings-currFindings),
+		Unchanged: min(currFindings, prevFindings),
 	}
 
 	return delta

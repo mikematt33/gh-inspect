@@ -140,26 +140,20 @@ func runOrgAnalysis(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Resolve output mode: flag overrides config, config overrides default
-	resolvedOutputMode := "observational" // default
-	if flagOutputMode != "" {
-		resolvedOutputMode = flagOutputMode
-	} else if cfg.Global.OutputMode != "" {
-		resolvedOutputMode = cfg.Global.OutputMode
-	}
+	// Resolve output mode: flag > config > default
+	outputMode := resolveOutputMode(cfg)
 
 	// 4. Run Pipeline
 	opts := AnalysisOptions{
-		Repos: targetRepos,
-		Since: flagSince, // Flag from root/org command share the same vars if defined in root?
-		// checks root.go... yes, var flagFormat, flagSince, flagDepth are package variables.
+		Repos:           targetRepos,
+		Since:           flagSince,
 		Depth:           flagDepth,
 		MaxPRs:          flagMaxPRs,
 		MaxIssues:       flagMaxIssues,
 		MaxWorkflowRuns: flagMaxWorkflowRuns,
 		Include:         flagInclude,
 		Exclude:         flagExclude,
-		OutputMode:      resolvedOutputMode,
+		OutputMode:      string(outputMode),
 	}
 
 	fullReport, err := pipelineRunner(opts)
@@ -168,20 +162,38 @@ func runOrgAnalysis(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Inject Org-level Stats into Summary (Manual Override)
-	// Currently Report.Summary is rudimentary, but we can set TotalReposAnalyzed at least.
+	// Inject Org-level Stats into Summary
 	fullReport.Summary.TotalReposAnalyzed = len(targetRepos)
+	applyRemediationTracking(fullReport)
+	if _, _, err := handleBaselineFeatures(fullReport); err != nil {
+		fmt.Printf("\n❌ Failure: %v.\n", err)
+		os.Exit(1)
+	}
 
 	// 5. Render Output
 	var renderer report.Renderer
-	if flagFormat == "json" {
+	switch flagFormat {
+	case "json":
 		renderer = &report.JSONRenderer{}
-	} else {
+	case "markdown":
+		renderer = &report.MarkdownRenderer{}
+	default:
 		renderer = &report.TextRenderer{}
 	}
 
-	if err := renderer.Render(fullReport, os.Stdout); err != nil {
+	renderOpts := report.RenderOptions{
+		ShowExplanation: flagExplain,
+		OutputMode:      outputMode,
+		SummaryMode:     flagSummary,
+	}
+
+	if err := renderer.RenderWithOptions(fullReport, os.Stdout, renderOpts); err != nil {
 		fmt.Printf("Error rendering report: %v\n", err)
+	}
+
+	// Write to file if --output-file specified
+	if flagOutputFile != "" {
+		writeOutputFile(fullReport, renderOpts)
 	}
 
 	// Exit Code Check

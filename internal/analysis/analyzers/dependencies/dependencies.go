@@ -60,7 +60,6 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 				if err == nil && content != "" {
 					detectedManagers[pm.Name] = true
 					dependencyFiles[file] = content
-					break // Found one file for this manager
 				}
 			}
 		}

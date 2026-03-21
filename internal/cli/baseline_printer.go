@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/mikematt33/gh-inspect/pkg/baseline"
-	"github.com/mikematt33/gh-inspect/pkg/util"
 )
 
 // printComparison prints a comparison result in a human-readable format
@@ -88,7 +87,7 @@ func showTopChanges(comp *baseline.ComparisonResult) {
 	// Show top improvements
 	if len(improvements) > 0 {
 		fmt.Println(colorGreen + "Top Improvements:" + colorReset)
-		count := util.Min(5, len(improvements))
+		count := min(5, len(improvements))
 		for i := 0; i < count; i++ {
 			change := improvements[i]
 			fmt.Printf("  • %s: %.2f → %.2f (%.1f%%)\n",
@@ -100,7 +99,7 @@ func showTopChanges(comp *baseline.ComparisonResult) {
 	// Show top degradations
 	if len(degradations) > 0 {
 		fmt.Println(colorRed + "Top Degradations:" + colorReset)
-		count := util.Min(5, len(degradations))
+		count := min(5, len(degradations))
 		for i := 0; i < count; i++ {
 			change := degradations[i]
 			fmt.Printf("  • %s: %.2f → %.2f (%.1f%%)\n",
@@ -110,15 +109,26 @@ func showTopChanges(comp *baseline.ComparisonResult) {
 	}
 }
 
+func printTrendSummary(trend *baseline.TrendSummary) {
+	if trend == nil || len(trend.Points) == 0 {
+		return
+	}
+
+	fmt.Println("\n" + colorBold + "📈 Baseline Trend" + colorReset)
+	first := trend.Points[0]
+	latest := trend.Points[len(trend.Points)-1]
+	fmt.Printf("Window: %s → %s (%d snapshot(s))\n", first.Timestamp.Format(time.RFC3339), latest.Timestamp.Format(time.RFC3339), trend.ComparedSnapshots)
+	printMetricDelta("Health Score", trend.HealthScoreDelta, true)
+	printMetricDelta("CI Success Rate", trend.CISuccessRateDelta, true)
+	printMetricDelta("PR Cycle Time", trend.PRCycleTimeDelta, false)
+	printMetricDelta("Issues Found", float64(trend.IssuesFoundDelta), false)
+	fmt.Println()
+}
+
 // ANSI color codes
 const (
-	colorReset  = "\033[0m"
-	colorRed    = "\033[31m"
-	colorGreen  = "\033[32m"
-	colorYellow = "\033[33m"
-	colorBlue   = "\033[34m"
-	colorPurple = "\033[35m"
-	colorCyan   = "\033[36m"
-	colorWhite  = "\033[37m"
-	colorBold   = "\033[1m"
+	colorReset = "\033[0m"
+	colorRed   = "\033[31m"
+	colorGreen = "\033[32m"
+	colorBold  = "\033[1m"
 )
