@@ -13,17 +13,25 @@ import (
 
 func TestRemediationSetStatusCommand(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "remediation.json")
+
+	origFile := flagRemediationFile
+	origNote := remediationNote
+	defer func() {
+		flagRemediationFile = origFile
+		remediationNote = origNote
+	}()
+
 	flagRemediationFile = path
 	remediationNote = "working on it"
 
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
 
 	runRemediationSetStatus(remediationSetStatusCmd, []string{"abc123", "in-progress"})
 
 	_ = w.Close()
-	os.Stdout = oldStdout
 
 	store, err := remediation.Load(path)
 	if err != nil {
@@ -34,6 +42,7 @@ func TestRemediationSetStatusCommand(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)
+	_ = r.Close()
 	if buf.Len() == 0 {
 		t.Fatal("expected command output")
 	}
@@ -44,6 +53,26 @@ func TestRunAnalysisShowsRemediationStatus(t *testing.T) {
 	defer func() { pipelineRunner = originalPipelineRunner }()
 
 	path := filepath.Join(t.TempDir(), "remediation.json")
+
+	origFile := flagRemediationFile
+	origFormat := flagFormat
+	origFail := flagFail
+	origCompareLast := flagCompareLast
+	origSaveBaseline := flagSaveBaseline
+	origCompareHistory := flagCompareHistory
+	origBaseline := flagBaseline
+	origFailOnRegression := flagFailOnRegression
+	defer func() {
+		flagRemediationFile = origFile
+		flagFormat = origFormat
+		flagFail = origFail
+		flagCompareLast = origCompareLast
+		flagSaveBaseline = origSaveBaseline
+		flagCompareHistory = origCompareHistory
+		flagBaseline = origBaseline
+		flagFailOnRegression = origFailOnRegression
+	}()
+
 	flagRemediationFile = path
 	store := &remediation.Store{Entries: map[string]remediation.Entry{}}
 	finding := models.Finding{Type: "ci_failure", Message: "CI is failing"}
@@ -67,6 +96,7 @@ func TestRunAnalysisShowsRemediationStatus(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
 
 	flagFormat = "text"
 	flagFail = 0
@@ -78,10 +108,10 @@ func TestRunAnalysisShowsRemediationStatus(t *testing.T) {
 	runAnalysis(runCmd, []string{"owner/repo"})
 
 	_ = w.Close()
-	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)
+	_ = r.Close()
 	if !bytes.Contains(buf.Bytes(), []byte("resolved")) {
 		t.Fatalf("expected remediation status in output, got %s", buf.String())
 	}

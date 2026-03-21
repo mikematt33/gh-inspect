@@ -217,9 +217,12 @@ func (c *ClientWrapper) GetRepository(ctx context.Context, owner, repo string) (
 		CustomProperties json.RawMessage `json:"custom_properties,omitempty"`
 	}{Repository: r}
 
-	_, err = c.GetUnderlyingClient().Do(ctx, req, wrapper)
+	resp, err := c.GetUnderlyingClient().Do(ctx, req, wrapper)
 	if err != nil {
 		return nil, err
+	}
+	if resp != nil {
+		c.checkRateLimit(resp)
 	}
 	return r, nil
 }

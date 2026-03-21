@@ -101,7 +101,7 @@ func SaveWithHistory(report *models.Report, path string) (string, error) {
 		return "", fmt.Errorf("failed to create baseline history directory: %w", err)
 	}
 
-	snapshotPath := filepath.Join(historyDir, fmt.Sprintf("baseline-%s.json", baseline.Timestamp.UTC().Format("20060102-150405")))
+	snapshotPath := filepath.Join(historyDir, fmt.Sprintf("baseline-%s.json", baseline.Timestamp.UTC().Format("20060102-150405.000000000")))
 	if err := writeBaseline(&baseline, snapshotPath); err != nil {
 		return "", err
 	}

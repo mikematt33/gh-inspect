@@ -94,7 +94,6 @@ func TestSaveWithHistoryAndTrend(t *testing.T) {
 	if _, err := SaveWithHistory(createTestReport(80, 90, 3, 10), baselinePath); err != nil {
 		t.Fatalf("first SaveWithHistory failed: %v", err)
 	}
-	time.Sleep(1100 * time.Millisecond)
 	if _, err := SaveWithHistory(createTestReport(85, 95, 2, 8), baselinePath); err != nil {
 		t.Fatalf("second SaveWithHistory failed: %v", err)
 	}
