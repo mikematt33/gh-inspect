@@ -100,6 +100,9 @@ func IsValidStatus(status string) bool {
 }
 
 func SetStatus(store *Store, id string, status Status, note string) {
+	if store == nil {
+		return
+	}
 	if store.Entries == nil {
 		store.Entries = map[string]Entry{}
 	}
@@ -112,6 +115,9 @@ func SetStatus(store *Store, id string, status Status, note string) {
 }
 
 func ListEntries(store *Store) []Entry {
+	if store == nil {
+		return nil
+	}
 	entries := make([]Entry, 0, len(store.Entries))
 	for _, entry := range store.Entries {
 		entries = append(entries, entry)

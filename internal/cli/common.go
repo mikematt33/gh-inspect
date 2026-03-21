@@ -230,7 +230,7 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 			}
 		}
 		if len(unknown) > 0 {
-			fmt.Fprintf(os.Stderr, "⚠️  WARNING: Unknown analyzer(s) in --include: %s\n   Valid names: activity, prflow, ci, issues, security, releases, branches, dependencies, health\n", strings.Join(unknown, ", "))
+			fmt.Fprintf(os.Stderr, "⚠️  WARNING: Unknown analyzer(s) in --include: %s\n   Valid names: activity, prflow/pr-flow, ci, issues/issue-hygiene, security, releases, branches, dependencies, health/repo-health\n", strings.Join(unknown, ", "))
 		}
 	}
 
@@ -336,7 +336,7 @@ func RunAnalysisPipeline(opts AnalysisOptions) (*models.Report, error) {
 					res.Name = az.Name()
 					res.Findings = append(res.Findings, models.Finding{
 						Type:     "analyzer_error",
-						Severity: models.SeverityLow,
+						Severity: models.SeverityHigh,
 						Message:  fmt.Sprintf("Analysis failed: %v", err),
 					})
 				}
