@@ -28,30 +28,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh-inspect run ${{ github.repository }} \
+          gh-inspect run "${{ github.repository }}" \
+            --quiet \
             --format=json \
             --fail-under=70 \
-            > analysis-report.json
-        with:
-          name: health-baseline
-          path: ~/.gh-inspect/baseline.json
-
-      - name: Comment PR with analysis
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const report = fs.readFileSync('analysis-report.md', 'utf8');
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: report
-            });
-
-      - name: Upanalysis-report.json
+            --output-file=analysis-report.json
 
       - name: Comment PR with analysis
         if: github.event_name == 'pull_request'
@@ -61,18 +42,17 @@ jobs:
             const fs = require('fs');
             const report = JSON.parse(fs.readFileSync('analysis-report.json', 'utf8'));
 
-            // Format a simple summary from JSON
-            const repo = report.repositories[0];
-            const score = report.summary.avg_health_score || 0;
+            // Format a simple summary from the JSON report.
+            const score = report.summary?.avg_health_score ?? 0;
             const emoji = score >= 80 ? '🟢' : score >= 60 ? '🟡' : '🔴';
 
             let body = `## ${emoji} Repository Health Analysis\n\n`;
             body += `**Health Score:** ${score}/100\n\n`;
             body += `**Summary:**\n`;
-            body += `- Total Issues Found: ${report.summary.issues_found}\n`;
-            body += `- Repos at Risk: ${report.summary.repos_at_risk}\n`;
+            body += `- Total Issues Found: ${report.summary?.issues_found ?? 0}\n`;
+            body += `- Repos at Risk: ${report.summary?.repos_at_risk ?? 0}\n`;
 
-            github.rest.issues.createComment({
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
