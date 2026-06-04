@@ -17,7 +17,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          # Use the latest stable Go: the project targets 1.24+, but the pinned
+          # golangci-lint version installed by `make lint` requires Go >= 1.25.
+          go-version: "stable"
           cache: true
 
       - name: Install dependencies

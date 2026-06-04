@@ -6,7 +6,7 @@ Thank you for your interest in contributing to `gh-inspect`! We welcome contribu
 
 ### Prerequisites
 
-- Go 1.24 or higher
+- Go 1.24 or higher (building & tests). `make lint` installs a pinned `golangci-lint` that requires Go 1.25+.
 - `make` (optional, but recommended)
 - GitHub Personal Access Token (for API access)
 
