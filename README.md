@@ -2,33 +2,62 @@
 
 # gh-inspect
 
-**gh-inspect** is an opinionated, deep-inspection CLI tool designed to measure the engineering health of GitHub repositories. It goes beyond simple metrics, analyzing commit patterns, PR velocity, issue hygiene, and CI stability to provide a comprehensive "Health Score" for your project.
+**gh-inspect** is an opinionated, deep-inspection CLI that measures the engineering health of GitHub repositories. It analyzes commit patterns, PR velocity, issue hygiene, CI stability, security posture, and more, distilling hundreds of data points into a single 0–100 **Health Score**. It also ships a dedicated `actions` command for deep GitHub Actions analytics — workflow run health, duration percentiles, runner usage, and org-wide roll-ups — backed by quota-aware multi-token and GitHub App authentication.
+
+Run it against a single repo, an entire organization, or every repo a user owns; output as text, JSON, or Markdown for dashboards, CI gates, and PR comments.
 
 ![Build Status](https://github.com/mikematt33/gh-inspect/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Go Version](https://img.shields.io/badge/go-1.21+-00ADD8.svg)
+![Go Version](https://img.shields.io/badge/go-1.24+-00ADD8.svg)
+
+## 📑 Table of Contents
+
+- [Key Features](#-key-features)
+- [Installation](#️-installation)
+- [System Requirements](#-system-requirements)
+- [Quick Start](#-quick-start)
+- [Usage Details](#️-usage-details)
+  - [Available Commands](#available-commands)
+  - [`actions` — GitHub Actions Analytics](#actions---github-actions-analytics)
+  - [GitHub Actions Integration](#github-actions-integration)
+- [Enterprise Scaling & Rate Limiting](#-enterprise-scaling--rate-limiting)
+- [Configuration](#️-configuration)
+- [Included Analyzers](#-included-analyzers)
+- [Recommendations Engine](#-recommendations-engine)
+- [Performance & API Optimization](#-performance--api-optimization)
+- [Contributing](#-contributing)
+- [License](#-license)
 
 ## 🚀 Key Features
 
-- **Engineering Health Score**: Aggregates hundreds of data points into a single 0-100 score.
-- **Flexible Output Modes**: Choose between suggestive (prescriptive advice), observational (neutral facts), or statistical (numbers only) presentation.
-- **Baseline & Regression Detection**: Track score changes over time and detect regressions automatically.
-- **Baseline History & Trends**: Save timestamped snapshots and compare the current run against recent history.
-- **Remediation Tracking**: Assign stable finding IDs and track findings as open, in-progress, resolved, accepted, or ignored.
-- **Score Explanation**: Detailed breakdown showing why your score changed with improvement tips.
-- **Bus Factor Analysis**: Identifies if your project relies too heavily on single contributors.
-- **Code Quality Metrics**: Tracks code churn, review coverage, and review depth.
-- **Collaboration Metrics**: Measures reviewer engagement, cross-team collaboration, and discussion depth.
-- **PR Velocity**: Measures Cycle Time, Reviews per PR, and identifies "Giant PRs" that slow down development.
-- **Zombie Detection**: Finds stale issues and PRs that are clogging up your backlog.
-- **CI Insights**: Tracks workflow success rates, expensive runs, and stability.
-- **Deployment Metrics**: Analyzes release consistency, frequency, and rapid release patterns.
-- **Dependency Analysis**: Multi-language dependency detection and management insights.
-- **Smart Depth Control**: Choose between shallow, standard, or deep analysis with fine-grained API usage control.
-- **Recommendations Engine**: Get actionable suggestions with explanations for every finding.
-- **GitHub Actions Integration**: Markdown output optimized for PR comments and Actions summaries.
-- **Repository Filtering**: Filter org/user scans by name, language, topics, and update date.
-- **CI/CD Gates**: Use `--fail-under` to block merges if repository health drops below a certain threshold.
+**Scoring & insights**
+
+- **Engineering Health Score** — aggregates hundreds of data points into a single 0–100 score.
+- **Score Explanation** — `--explain` shows exactly why your score changed, with improvement tips.
+- **Recommendations Engine** — actionable suggestions with "why this matters" context for every finding.
+- **Flexible Output Modes** — suggestive (advice), observational (neutral facts), or statistical (numbers only).
+
+**Tracking over time**
+
+- **Baseline & Regression Detection** — snapshot scores and fail CI automatically when they drop.
+- **Baseline History & Trends** — compare the current run against recent timestamped snapshots.
+- **Remediation Tracking** — stable finding IDs tracked as open, in-progress, resolved, accepted, or ignored.
+
+**What it analyzes**
+
+- **Activity & Bus Factor** — commit velocity, contributor growth, and single-maintainer risk.
+- **PR Velocity & Collaboration** — cycle time, review coverage, reviewer engagement, and "Giant PR" detection.
+- **Issue Hygiene** — stale/zombie detection, response times, and backlog health.
+- **CI & GitHub Actions Analytics** — workflow success rates, expensive runs, plus a dedicated `actions` command for run health, duration percentiles, runner usage, queue time, scheduled-workflow monitoring, and org roll-ups.
+- **Deployment & Dependencies** — release cadence, changelog coverage, and multi-language dependency insights.
+
+**Scale & automation**
+
+- **Single repo, org, or user** scans with **repository filtering** by name, language, topics, and update date.
+- **Smart Depth Control** — shallow, standard, or deep analysis with fine-grained API budgeting.
+- **Quota-aware auth** — multi-token rotation and GitHub App installation tokens with pre-flight cost estimation.
+- **CI/CD Gates** — `--fail-under` and `--fail-on-regression` to block merges on poor health.
+- **Markdown output** optimized for PR comments and GitHub Actions step summaries.
 
 ## 🛠️ Installation
 
@@ -260,6 +289,61 @@ gh-inspect org my-org --filter-topics=production --filter-updated=90d
 # Skip forked repositories
 gh-inspect org my-org --filter-skip-forks
 ```
+
+#### `actions` - GitHub Actions Analytics
+
+Deep analytics on GitHub Actions across one or more repositories or an entire organization.
+
+```bash
+gh-inspect actions [owner/repo...] [flags]
+```
+
+**What it reports:**
+
+- **Workflow inventory** — name, path, trigger events, and enabled/disabled state
+- **Run health** — total/success/failure/cancelled/skipped counts, success rate, MTBF, and flakiness detection
+- **Duration metrics** — average, median, p95, max run duration, plus a slow-down trend
+- **Runner usage** — GitHub-hosted vs. self-hosted breakdown by OS, with deprecated-label warnings
+- **Queue time** — time between a run being queued and starting (when available)
+- **Job-level breakdown** — slowest jobs bottlenecking a workflow (with `--sample-jobs`)
+- **Scheduled workflows** — last run, last conclusion, and next expected run (parsed from `cron`)
+- **Org roll-up** — per-repo summaries plus compute minutes (hosted vs. self-hosted) and failure hotspots
+
+**Flags:**
+
+- `--repo owner/repo` (repeatable), `--org <organization>`
+- `--days <n>` lookback window, `--max-runs <n>` cap per repo, `--workflow <file|name>` to scope to one workflow
+- `--top <n>` slowest jobs / hotspots, `--sample-jobs <n>` recent runs per workflow to inspect for job/runner detail
+- `--format text|json|markdown`, `--output-file <path>`
+- `--dry-run` (pre-flight estimate only), `--confirm` (proceed past pre-flight without prompting; fails if quota is insufficient)
+- **Auth:** `--token` (repeatable PATs), `--app-id` / `--app-key` / `--installation-id` (GitHub App)
+
+**Examples:**
+
+```bash
+gh-inspect actions --repo owner/repo
+gh-inspect actions --repo owner/repo1 --repo owner/repo2
+gh-inspect actions --org myorg
+gh-inspect actions --repo owner/repo --days 60
+gh-inspect actions --repo owner/repo --workflow ci.yml
+gh-inspect actions --org myorg --top 10
+gh-inspect actions --org myorg --dry-run
+gh-inspect actions --org myorg --confirm
+gh-inspect actions --token ghp_aaa --token ghp_bbb --repo owner/repo
+gh-inspect actions --app-id 12345 --app-key ./private-key.pem --installation-id 67890 --org myorg
+```
+
+**Authentication & token management:**
+
+- **Multi-PAT rotation** — provide multiple PATs via `--token` (repeatable), the `GITHUB_TOKENS` env var, or `global.github_tokens` in config. The pool tracks each token's remaining quota independently and automatically routes each request to the token with the most remaining quota, rotating away on `403`/`429`. Exhausted or invalid tokens are surfaced at the end of a run.
+- **GitHub App** — supply an App ID, installation ID, and private key (PEM file or inline) via flags or `global.github_apps` in config. Short-lived installation tokens are generated on demand and auto-refreshed before their one-hour expiry. Multiple installations are supported.
+- **Pre-flight cost estimation** — before a large scan the tool estimates the repos in scope, workflow count, and total API calls required, then compares that against the available quota across all configured credentials. Use `--dry-run` to estimate without scanning, and `--confirm` to proceed non-interactively (the scan fails fast if quota is insufficient). The confirmation threshold is configurable via `actions.confirm_threshold`.
+
+**Required permissions:**
+
+- **PAT (classic):** `repo` (private) or `public_repo`, plus `read:org` for org scans. The `workflow` scope is _not_ required for read-only analytics.
+- **PAT (fine-grained):** `Actions: read`, `Metadata: read`, and `Administration: read` (the latter only for self-hosted runner detail).
+- **GitHub App:** `actions:read`, `metadata:read`, and `administration:read`.
 
 #### `run` - Analyze Repositories
 
@@ -638,6 +722,8 @@ Running heavy inspections over large organizations can frequently strike the Git
 You can provide an array of comma-separated tokens via the `GITHUB_TOKENS` environment variable (e.g. `GITHUB_TOKENS="tokenA,tokenB,tokenC"`).
 Under the hood, `gh-inspect` internally provisions a thread-safe round-robin rotator that automatically distributes outgoing requests sequentially across all supplied tokens—drastically extending the total number of allowed API calls across multiple identities before hitting block thresholds.
 
+The [`actions`](#actions---github-actions-analytics) command goes a step further with a **quota-aware** pool: it tracks each token's remaining rate-limit independently, always routes the next request to the credential with the most remaining quota, rotates away on `403`/`429`, and can mix in GitHub App installation tokens alongside PATs. See [Actions Analytics & Multi-Credential Configuration](#actions-analytics--multi-credential-configuration) for setup.
+
 ## ⚙️ Configuration
 
 Run `init` to generate a default configuration if one does not exist (this happens automatically on first run):
@@ -698,6 +784,34 @@ All analyzers can be enabled/disabled and configured:
 - **releases** 🆕 - Enabled by default (includes deployment metrics)
 - **branches** 🆕 - Enabled by default, configurable stale threshold (90 days)
 - **dependencies** 🆕 - Enabled by default (multi-language support)
+
+### Actions Analytics & Multi-Credential Configuration
+
+The `actions` command supports a credential pool and its own defaults in `config.yaml`:
+
+```yaml
+global:
+  # Single token (comma-separated also accepted)
+  github_token: ghp_xxx
+  # Pool of PATs for quota-aware rotation
+  github_tokens:
+    - ghp_aaa
+    - ghp_bbb
+  # One or more GitHub App installations
+  github_apps:
+    - name: ci-app
+      app_id: 12345
+      installation_id: 67890
+      private_key_path: ./private-key.pem # or `private_key:` with inline PEM
+
+actions:
+  days: 30 # default lookback window
+  max_runs: 1000 # cap on runs fetched per repo
+  sample_job_runs: 0 # recent runs per workflow to inspect for job/runner detail
+  duration_threshold_sec: 1800 # flag workflows whose avg duration exceeds this
+  queue_threshold_sec: 300 # flag workflows with long queue waits
+  confirm_threshold: 1000 # est. API calls above which --confirm is required
+```
 
 ### Output Modes
 

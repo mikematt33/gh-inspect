@@ -11,12 +11,35 @@ import (
 type Config struct {
 	Global    GlobalConfig    `yaml:"global"`
 	Analyzers AnalyzersConfig `yaml:"analyzers"`
+	Actions   ActionsConfig   `yaml:"actions"`
 }
 
 type GlobalConfig struct {
-	Concurrency int    `yaml:"concurrency"`
-	GitHubToken string `yaml:"github_token,omitempty"`
-	OutputMode  string `yaml:"output_mode,omitempty"` // observational (default), suggestive, statistical
+	Concurrency  int         `yaml:"concurrency"`
+	GitHubToken  string      `yaml:"github_token,omitempty"`
+	GitHubTokens []string    `yaml:"github_tokens,omitempty"` // pool of PATs for rotation
+	Apps         []AppConfig `yaml:"github_apps,omitempty"`   // GitHub App installations
+	OutputMode   string      `yaml:"output_mode,omitempty"`   // observational (default), suggestive, statistical
+}
+
+// AppConfig holds credentials for a single GitHub App installation.
+// PrivateKey may be an inline PEM string or a path to a PEM file.
+type AppConfig struct {
+	Name           string `yaml:"name,omitempty"`
+	AppID          int64  `yaml:"app_id"`
+	InstallationID int64  `yaml:"installation_id"`
+	PrivateKey     string `yaml:"private_key,omitempty"`      // inline PEM or file path
+	PrivateKeyPath string `yaml:"private_key_path,omitempty"` // explicit file path
+}
+
+// ActionsConfig holds defaults for the `actions` analytics command.
+type ActionsConfig struct {
+	Days                 int     `yaml:"days,omitempty"`
+	MaxRuns              int     `yaml:"max_runs,omitempty"`
+	SampleJobRuns        int     `yaml:"sample_job_runs,omitempty"`
+	DurationThresholdSec float64 `yaml:"duration_threshold_sec,omitempty"`
+	QueueThresholdSec    float64 `yaml:"queue_threshold_sec,omitempty"`
+	ConfirmThreshold     int     `yaml:"confirm_threshold,omitempty"` // est. API calls above which confirmation is required
 }
 
 type AnalyzersConfig struct {
@@ -133,6 +156,14 @@ func Load() (*Config, error) {
 			Dependencies: DependenciesConfig{
 				Enabled: true,
 			},
+		},
+		Actions: ActionsConfig{
+			Days:                 30,
+			MaxRuns:              1000,
+			SampleJobRuns:        0,
+			DurationThresholdSec: 1800,
+			QueueThresholdSec:    300,
+			ConfirmThreshold:     1000,
 		},
 	}
 

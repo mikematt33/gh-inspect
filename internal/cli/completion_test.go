@@ -337,3 +337,87 @@ func TestRunAutoCompletionUnsupportedShell(t *testing.T) {
 		t.Errorf("Expected unsupported shell message in output, got: %s", output)
 	}
 }
+
+func TestIsDynamicCompletionSetup(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{"source-based bash", "# existing\nsource <(gh-inspect completion bash)\n", true},
+		{"source-based zsh", "source <(gh-inspect completion zsh)", true},
+		{"commented-out source", "# source <(gh-inspect completion bash)\n", false},
+		{"static script with marker", "# gh-inspect completion version: abc123\n_gh-inspect() { :; }\n", false},
+		{"unrelated", "export PATH=$PATH\n", false},
+	}
+	for _, tc := range cases {
+		if got := isDynamicCompletionSetup(tc.content); got != tc.want {
+			t.Errorf("%s: isDynamicCompletionSetup = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// captureCompletionStatus runs runCompletionStatus with a mocked HOME/SHELL and
+// the given .bashrc content, returning everything printed to stdout.
+func captureCompletionStatus(t *testing.T, bashrcContent string) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+
+	originalHome := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", originalHome) }()
+	_ = os.Setenv("HOME", tmpDir)
+
+	originalShell := os.Getenv("SHELL")
+	defer func() { _ = os.Setenv("SHELL", originalShell) }()
+	_ = os.Setenv("SHELL", "/bin/bash")
+
+	if err := os.WriteFile(filepath.Join(tmpDir, ".bashrc"), []byte(bashrcContent), 0644); err != nil {
+		t.Fatalf("Failed to write .bashrc: %v", err)
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	runCompletionStatus()
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	return buf.String()
+}
+
+func TestCompletionStatusCurrentMarker(t *testing.T) {
+	content := "# gh-inspect completion version: " + getCompletionVersion() + "\n# gh-inspect\n_gh-inspect() { :; }\n"
+	output := captureCompletionStatus(t, content)
+
+	if !strings.Contains(output, "Up to date") {
+		t.Errorf("Expected up-to-date status for current marker, got: %s", output)
+	}
+}
+
+func TestCompletionStatusOutdatedMarker(t *testing.T) {
+	content := "# gh-inspect completion version: deadbeef0000\n# gh-inspect\n_gh-inspect() { :; }\n"
+	output := captureCompletionStatus(t, content)
+
+	if !strings.Contains(output, "Outdated") {
+		t.Errorf("Expected outdated status for stale marker, got: %s", output)
+	}
+}
+
+func TestCompletionStatusDynamicSourceBasedIsAlwaysCurrent(t *testing.T) {
+	// The default --auto setup sources completions live from the binary, so it
+	// must never be reported as outdated regardless of version markers.
+	content := "# existing\n# gh-inspect completion\nsource <(gh-inspect completion bash)\n"
+	output := captureCompletionStatus(t, content)
+
+	if !strings.Contains(output, "Up to date") {
+		t.Errorf("Expected dynamic source-based setup to be up to date, got: %s", output)
+	}
+	if strings.Contains(output, "regeneration") || strings.Contains(output, "Outdated") {
+		t.Errorf("Dynamic setup should not warn about regeneration, got: %s", output)
+	}
+}

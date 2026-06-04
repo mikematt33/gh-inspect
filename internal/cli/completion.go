@@ -243,6 +243,22 @@ func writeCompletionHeader(w *os.File, shell string) {
 	_, _ = fmt.Fprintf(w, "%s Generated: %s\n\n", comment, "auto")
 }
 
+// isDynamicCompletionSetup reports whether the config sources completions live
+// from the binary (e.g. `source <(gh-inspect completion bash)`). Such setups
+// regenerate on every shell start and are therefore always up to date.
+func isDynamicCompletionSetup(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.Contains(trimmed, "source") && strings.Contains(trimmed, "gh-inspect completion") {
+			return true
+		}
+	}
+	return false
+}
+
 // runCompletionStatus checks if installed completions match current version
 func runCompletionStatus() {
 	shell := os.Getenv("SHELL")
@@ -300,6 +316,14 @@ func runCompletionStatus() {
 
 		found = true
 		fmt.Printf("📄 Found: %s\n", path)
+
+		// A source-based setup (e.g. `source <(gh-inspect completion bash)`)
+		// regenerates completions from the current binary on every shell start,
+		// so it is always current regardless of any embedded version marker.
+		if isDynamicCompletionSetup(string(content)) {
+			fmt.Println("   ✅ Up to date (dynamic: regenerated from the installed binary)")
+			continue
+		}
 
 		// Check version marker
 		if strings.Contains(string(content), "completion version: "+currentVersion) {

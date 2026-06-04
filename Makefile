@@ -4,6 +4,9 @@ MAIN_PATH=cmd/gh-inspect/main.go
 # Get version from git, default to "dev" if no git
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS=-ldflags "-X 'github.com/mikematt33/gh-inspect/internal/cli.Version=$(VERSION)'"
+# Pin golangci-lint for reproducible CI/local linting. Bumping this may require a
+# newer Go toolchain (e.g. v2.12.x requires Go >= 1.25).
+GOLANGCI_LINT_VERSION ?= v2.12.2
 
 .PHONY: all build clean test vet fmt lint run-help
 
@@ -26,19 +29,19 @@ test:
 lint:
 	@echo "Running linters..."
 	@mkdir -p ./bin
-	@need_install=0; \
+	@want_ver=$$(echo "$(GOLANGCI_LINT_VERSION)" | sed 's/^v//'); \
+	need_install=0; \
 	if [ ! -x ./bin/golangci-lint ]; then \
 		need_install=1; \
 	else \
-		lint_go_ver=$$(./bin/golangci-lint version 2>/dev/null | sed -n 's/.*built with go\([0-9]*\.[0-9]*\).*/\1/p'); \
-		host_go_ver=$$(go env GOVERSION | sed -n 's/go\([0-9]*\.[0-9]*\).*/\1/p'); \
-		if [ -z "$$lint_go_ver" ] || [ "$$lint_go_ver" != "$$host_go_ver" ]; then \
+		have_ver=$$(./bin/golangci-lint version 2>/dev/null | sed -n 's/.*has version \([0-9][0-9.]*\).*/\1/p'); \
+		if [ "$$have_ver" != "$$want_ver" ]; then \
 			need_install=1; \
 		fi; \
 	fi; \
 	if [ $$need_install -eq 1 ]; then \
-		echo "Installing golangci-lint to ./bin with local Go toolchain..."; \
-		GOBIN=$$(pwd)/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest; \
+		echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION) to ./bin..."; \
+		GOBIN=$$(pwd)/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
 	fi
 	@./bin/golangci-lint run
 

@@ -155,7 +155,7 @@ func setConfigValue(obj interface{}, path string, valStr string) error {
 	v := reflect.ValueOf(obj)
 
 	// Ensure we have a pointer if we want to set it, or unwrap if it's an interface
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 
