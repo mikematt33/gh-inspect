@@ -186,16 +186,46 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 		Description:  "Calculated repo health score based on files and CI",
 	})
 
-	// 4. Check Branch Protection
+	// 4. Check Branch Protection.
+	// A branch can be protected either by "classic" branch protection or by a
+	// repository/organization ruleset. Check classic protection first, then fall
+	// back to the rulesets API so ruleset-only repos are not false negatives.
+	protected := false
+	requiresPRReviews := false
+	requiresStatusChecks := false
+
 	protection, _, protErr := client.GetUnderlyingClient().Repositories.GetBranchProtection(ctx, repo.Owner, repo.Name, defaultBranch)
 	if protErr == nil && protection != nil {
+		protected = true
+		requiresPRReviews = protection.RequiredPullRequestReviews != nil
+		requiresStatusChecks = protection.RequiredStatusChecks != nil
+	} else {
+		// Fall back to rulesets (GET /repos/{owner}/{repo}/rules/branches/{branch}).
+		rules, _, rulesErr := client.GetUnderlyingClient().Repositories.GetRulesForBranch(ctx, repo.Owner, repo.Name, defaultBranch)
+		if rulesErr == nil && len(rules) > 0 {
+			protected = true
+			for _, rule := range rules {
+				if rule == nil {
+					continue
+				}
+				switch rule.Type {
+				case "pull_request":
+					requiresPRReviews = true
+				case "required_status_checks":
+					requiresStatusChecks = true
+				}
+			}
+		}
+	}
+
+	if protected {
 		metrics = append(metrics, models.Metric{
 			Key:          "branch_protection_enabled",
 			Value:        1,
 			DisplayValue: "Yes",
 			Description:  "Branch protection rules configured",
 		})
-		if protection.RequiredPullRequestReviews != nil {
+		if requiresPRReviews {
 			metrics = append(metrics, models.Metric{
 				Key:          "requires_pr_reviews",
 				Value:        1,
@@ -203,7 +233,7 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 				Description:  "Requires PR reviews before merge",
 			})
 		}
-		if protection.RequiredStatusChecks != nil {
+		if requiresStatusChecks {
 			metrics = append(metrics, models.Metric{
 				Key:          "requires_status_checks",
 				Value:        1,
@@ -218,16 +248,15 @@ func (a *Analyzer) Analyze(ctx context.Context, client analysis.Client, repo ana
 			DisplayValue: "No",
 			Description:  "No branch protection configured",
 		})
-		// healthScore -= 15 // This assignment has no effect
 		findings = append(findings, models.Finding{
 			Type:        "no_branch_protection",
 			Severity:    models.SeverityMedium,
 			Message:     fmt.Sprintf("No branch protection on %s", defaultBranch),
 			Actionable:  true,
-			Remediation: "Enable branch protection rules.",
+			Remediation: "Enable branch protection rules or a ruleset.",
 			Explanation: "Without branch protection, anyone with write access can push directly to main, bypassing reviews and tests.",
 			SuggestedActions: []string{
-				"Enable 'Require pull request reviews before merging' in branch settings",
+				"Enable 'Require pull request reviews before merging' via branch protection or a ruleset",
 				"Enable 'Require status checks to pass before merging' to enforce CI",
 			},
 		})
