@@ -92,6 +92,14 @@ func (c *ClientWrapper) checkRateLimit(resp *github.Response) {
 		return
 	}
 
+	// Some responses (e.g. cached 304s, search endpoints, or errors returned
+	// before headers are populated) carry no rate-limit information. In that
+	// case Limit is zero and the numbers are meaningless, so skip the check to
+	// avoid a spurious "0/0" warning or an erroneous sleep.
+	if resp.Rate.Limit == 0 {
+		return
+	}
+
 	// Simple warning if low
 	if resp.Rate.Remaining < 50 {
 		fmt.Fprintf(os.Stderr, "⚠️ GitHub Rate Limit Low: %d/%d (Resets at %s)\n",

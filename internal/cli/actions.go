@@ -32,6 +32,7 @@ var (
 	flagActionsOutputFile string
 	flagActionsDryRun     bool
 	flagActionsConfirm    bool
+	flagActionsYes        bool
 
 	// auth flags
 	flagActionsTokens       []string
@@ -70,7 +71,19 @@ Required permissions:
   gh-inspect actions --app-id 12345 --app-key ./key.pem --installation-id 67890 --org myorg`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if flagActionsFormat != "" && flagActionsFormat != "text" && flagActionsFormat != "json" && flagActionsFormat != "markdown" {
-			return fmt.Errorf("invalid format: %s (must be text, json, or markdown)", flagActionsFormat)
+			return fmt.Errorf("invalid --format %q (must be text, json, or markdown)", flagActionsFormat)
+		}
+		if flagActionsDays < 0 {
+			return fmt.Errorf("invalid --days %d (must be 0 to use the config default, or a positive number of days)", flagActionsDays)
+		}
+		if flagActionsMaxRuns < 0 {
+			return fmt.Errorf("invalid --max-runs %d (must be 0 to use the config default, or a positive count)", flagActionsMaxRuns)
+		}
+		if flagActionsTop < 0 {
+			return fmt.Errorf("invalid --top %d (must be 0 to use the default, or a positive count)", flagActionsTop)
+		}
+		if flagActionsSampleJobs < 0 {
+			return fmt.Errorf("invalid --sample-jobs %d (must be 0 to disable, or a positive count)", flagActionsSampleJobs)
 		}
 		return nil
 	},
@@ -91,6 +104,7 @@ func init() {
 	actionsCmd.Flags().StringVar(&flagActionsOutputFile, "output-file", "", "Write report to file (.json/.md/.txt) in addition to stdout")
 	actionsCmd.Flags().BoolVar(&flagActionsDryRun, "dry-run", false, "Run only the pre-flight estimate and exit")
 	actionsCmd.Flags().BoolVar(&flagActionsConfirm, "confirm", false, "Proceed past pre-flight without prompting (for scripts); fails if quota is insufficient")
+	actionsCmd.Flags().BoolVarP(&flagActionsYes, "yes", "y", false, "Alias for --confirm: auto-approve the scan without prompting")
 
 	actionsCmd.Flags().StringArrayVar(&flagActionsTokens, "token", nil, "GitHub PAT to add to the rotation pool; repeatable")
 	actionsCmd.Flags().Int64Var(&flagActionsAppID, "app-id", 0, "GitHub App ID")
@@ -150,6 +164,18 @@ func runActions(cmd *cobra.Command, args []string) {
 	}
 
 	opts := actionsOptions(cfg, cmd)
+
+	if shouldPrintInfo() {
+		daysSource := "config default"
+		if flagActionsDays > 0 {
+			daysSource = "--days"
+		}
+		fmt.Fprintf(os.Stderr, "Analyzing %d repositor%s over the last %d days (%s), up to %d runs per repo.\n",
+			len(repos), plural(len(repos), "y", "ies"), opts.Days, daysSource, opts.MaxRuns)
+		if opts.WorkflowFilter != "" {
+			fmt.Fprintf(os.Stderr, "Restricting to workflow: %s\n", opts.WorkflowFilter)
+		}
+	}
 
 	// Pre-flight estimate.
 	avgWF := measureAvgWorkflows(ctx, client, repos)
@@ -247,6 +273,14 @@ func actionsOptions(cfg *config.Config, cmd *cobra.Command) actions.Options {
 func cmdFlagChanged(cmd *cobra.Command, name string) bool {
 	f := cmd.Flags().Lookup(name)
 	return f != nil && f.Changed
+}
+
+// plural returns singular or plural suffix based on n.
+func plural(n int, singular, plural string) string {
+	if n == 1 {
+		return singular
+	}
+	return plural
 }
 
 func actionsMeta(cfg *config.Config, repoArgs []string) models.ActionsMeta {
@@ -421,25 +455,26 @@ func measureAvgWorkflows(ctx context.Context, client *ghclient.ActionsClient, re
 // confirmScan enforces the confirmation policy for large or under-quota scans.
 // Returns true if the scan may proceed.
 func confirmScan(est *models.PreflightEstimate, threshold int) bool {
+	autoConfirm := flagActionsConfirm || flagActionsYes
 	large := threshold > 0 && est.EstimatedAPICalls > threshold
 	needsConfirm := large || !est.Sufficient
 
 	if !needsConfirm {
 		return true
 	}
-	if !est.Sufficient && flagActionsConfirm {
+	if !est.Sufficient && autoConfirm {
 		// Explicit confirmation cannot override insufficient quota in scripts.
 		fmt.Fprintln(os.Stderr, "✗ Insufficient quota across all credentials to complete this scan.")
 		return false
 	}
-	if flagActionsConfirm {
+	if autoConfirm {
 		return true
 	}
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		fmt.Fprintf(os.Stderr, "Large scan (~%d API calls > threshold %d). Re-run with --confirm to proceed.\n", est.EstimatedAPICalls, threshold)
+		fmt.Fprintf(os.Stderr, "Large scan (~%d API calls > threshold %d). Re-run with --confirm (or --yes) to proceed.\n", est.EstimatedAPICalls, threshold)
 		return false
 	}
-	fmt.Fprintf(os.Stderr, "Proceed with scan of ~%d API calls? [y/N] ", est.EstimatedAPICalls)
+	fmt.Fprintf(os.Stderr, "Proceed with scan of ~%d API calls? [y/N] (tip: pass --yes to skip this prompt) ", est.EstimatedAPICalls)
 	reader := bufio.NewReader(os.Stdin)
 	line, _ := reader.ReadString('\n')
 	answer := strings.ToLower(strings.TrimSpace(line))

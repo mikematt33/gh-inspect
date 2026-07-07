@@ -231,8 +231,10 @@ func (e *Engine) analyzeJobs(ctx context.Context, owner, repo string, chrono []*
 			rc := classifyRunner(job.Labels)
 			if rc.hosted {
 				runnerMix.GitHubHosted++
+				wr.Runners.GitHubHosted++
 			} else {
 				runnerMix.SelfHosted++
+				wr.Runners.SelfHosted++
 			}
 			runnerMix.ByOS[rc.os]++
 			if rc.primary != "" {

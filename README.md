@@ -315,7 +315,7 @@ gh-inspect actions [owner/repo...] [flags]
 - `--days <n>` lookback window, `--max-runs <n>` cap per repo, `--workflow <file|name>` to scope to one workflow
 - `--top <n>` slowest jobs / hotspots, `--sample-jobs <n>` recent runs per workflow to inspect for job/runner detail
 - `--format text|json|markdown`, `--output-file <path>`
-- `--dry-run` (pre-flight estimate only), `--confirm` (proceed past pre-flight without prompting; fails if quota is insufficient)
+- `--dry-run` (pre-flight estimate only), `--confirm` / `--yes` / `-y` (proceed past pre-flight without prompting; fails if quota is insufficient)
 - **Auth:** `--token` (repeatable PATs), `--app-id` / `--app-key` / `--installation-id` (GitHub App)
 
 **Examples:**

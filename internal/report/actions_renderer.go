@@ -43,12 +43,33 @@ func (r *ActionsJSONRenderer) Render(report *models.ActionsReport, w io.Writer) 
 type ActionsTextRenderer struct{}
 
 func (r *ActionsTextRenderer) Render(report *models.ActionsReport, w io.Writer) error {
+	// Scan-scope header so the reader knows exactly what window/scope produced
+	// these numbers.
+	if report.Meta.WindowDays > 0 {
+		_, _ = fmt.Fprintf(w, "GitHub Actions analytics · scope: %s · window: last %d days\n",
+			valueOr(report.Meta.Scope, "repo"), report.Meta.WindowDays)
+	}
+
+	// For multi-repo/org scans, lead with a compact overview table so the report
+	// is scannable before diving into per-repo detail.
+	if len(report.Repositories) > 1 {
+		_, _ = fmt.Fprintln(w, "\n📋 OVERVIEW")
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		_, _ = fmt.Fprintln(tw, "  REPOSITORY\tWORKFLOWS\tRUNS\tSUCCESS\tCOMPUTE")
+		for _, repo := range report.Repositories {
+			t := repo.Totals
+			_, _ = fmt.Fprintf(tw, "  %s\t%d\t%d\t%.0f%%\t%s\n",
+				repo.Name, t.WorkflowCount, t.TotalRuns, t.SuccessRate, fmtCompute(t.ComputeMinutes))
+		}
+		_ = tw.Flush()
+	}
+
 	for _, repo := range report.Repositories {
 		_, _ = fmt.Fprintf(w, "\n⚙️  ACTIONS REPORT: %s\n", repo.Name)
 		_, _ = fmt.Fprintln(w, "==================================================")
 		t := repo.Totals
-		_, _ = fmt.Fprintf(w, "Workflows: %d   Runs: %d   Success rate: %.1f%%   Avg duration: %s   Compute: %.0f min\n",
-			t.WorkflowCount, t.TotalRuns, t.SuccessRate, fmtDur(t.AvgDurationSec), t.ComputeMinutes)
+		_, _ = fmt.Fprintf(w, "Workflows: %d   Runs: %d   Success rate: %.1f%%   Avg duration: %s   Compute: %s\n",
+			t.WorkflowCount, t.TotalRuns, t.SuccessRate, fmtDur(t.AvgDurationSec), fmtCompute(t.ComputeMinutes))
 
 		if mix := repo.RunnerMix; mix.GitHubHosted+mix.SelfHosted > 0 {
 			_, _ = fmt.Fprintf(w, "Runners: %d GitHub-hosted, %d self-hosted", mix.GitHubHosted, mix.SelfHosted)
@@ -64,15 +85,15 @@ func (r *ActionsTextRenderer) Render(report *models.ActionsReport, w io.Writer) 
 		if len(repo.Workflows) > 0 {
 			_, _ = fmt.Fprintln(w, "\nPer-workflow:")
 			tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-			_, _ = fmt.Fprintln(tw, "  WORKFLOW\tRUNS\tSUCCESS\tAVG\tP95\tMTBF(h)\tFLAKY")
+			_, _ = fmt.Fprintln(tw, "  WORKFLOW\tRUNS\tSUCCESS\tAVG\tP95\tMTBF(h)\tRUNNER\tFLAKY")
 			for _, wf := range repo.Workflows {
 				flaky := ""
 				if wf.Flaky {
 					flaky = "yes"
 				}
-				_, _ = fmt.Fprintf(tw, "  %s\t%d\t%.0f%%\t%s\t%s\t%s\t%s\n",
+				_, _ = fmt.Fprintf(tw, "  %s\t%d\t%.0f%%\t%s\t%s\t%s\t%s\t%s\n",
 					truncate(wf.Name, 28), wf.TotalRuns, wf.SuccessRate,
-					fmtDur(wf.AvgDurationSec), fmtDur(wf.P95DurationSec), fmtMTBF(wf.MTBFHours), flaky)
+					fmtDur(wf.AvgDurationSec), fmtDur(wf.P95DurationSec), fmtMTBF(wf.MTBFHours), runnerLabel(wf.Runners), flaky)
 			}
 			_ = tw.Flush()
 		}
@@ -125,8 +146,8 @@ func (r *ActionsTextRenderer) Render(report *models.ActionsReport, w io.Writer) 
 		_, _ = fmt.Fprintln(w, "==================================================")
 		_, _ = fmt.Fprintf(w, "Total workflows: %d   Total runs: %d   Overall success: %.1f%%\n",
 			s.TotalWorkflows, s.TotalRuns, s.OverallSuccessRate)
-		_, _ = fmt.Fprintf(w, "Compute minutes: %.0f GitHub-hosted, %.0f self-hosted\n",
-			s.ComputeMinutesHosted, s.ComputeMinutesSelf)
+		_, _ = fmt.Fprintf(w, "Compute minutes: %s GitHub-hosted, %s self-hosted\n",
+			fmtCompute(s.ComputeMinutesHosted), fmtCompute(s.ComputeMinutesSelf))
 		if len(s.FailureHotspots) > 0 {
 			_, _ = fmt.Fprintln(w, "\nFailure hotspots:")
 			for _, h := range s.FailureHotspots {
@@ -163,23 +184,23 @@ func (r *ActionsMarkdownRenderer) Render(report *models.ActionsReport, w io.Writ
 	for _, repo := range report.Repositories {
 		t := repo.Totals
 		_, _ = fmt.Fprintf(w, "\n## %s\n\n", repo.Name)
-		_, _ = fmt.Fprintf(w, "- Workflows: **%d**\n- Runs: **%d**\n- Success rate: **%.1f%%**\n- Avg duration: **%s**\n- Compute: **%.0f min**\n",
-			t.WorkflowCount, t.TotalRuns, t.SuccessRate, fmtDur(t.AvgDurationSec), t.ComputeMinutes)
+		_, _ = fmt.Fprintf(w, "- Workflows: **%d**\n- Runs: **%d**\n- Success rate: **%.1f%%**\n- Avg duration: **%s**\n- Compute: **%s**\n",
+			t.WorkflowCount, t.TotalRuns, t.SuccessRate, fmtDur(t.AvgDurationSec), fmtCompute(t.ComputeMinutes))
 		mix := repo.RunnerMix
 		if mix.GitHubHosted+mix.SelfHosted > 0 {
 			_, _ = fmt.Fprintf(w, "- Runners: %d GitHub-hosted / %d self-hosted\n", mix.GitHubHosted, mix.SelfHosted)
 		}
 
 		if len(repo.Workflows) > 0 {
-			_, _ = fmt.Fprintln(w, "\n| Workflow | Runs | Success | Avg | P95 | Flaky |")
-			_, _ = fmt.Fprintln(w, "|---|---:|---:|---:|---:|:--:|")
+			_, _ = fmt.Fprintln(w, "\n| Workflow | Runs | Success | Avg | P95 | Runner | Flaky |")
+			_, _ = fmt.Fprintln(w, "|---|---:|---:|---:|---:|:--:|:--:|")
 			for _, wf := range repo.Workflows {
 				flaky := ""
 				if wf.Flaky {
 					flaky = "⚠️"
 				}
-				_, _ = fmt.Fprintf(w, "| %s | %d | %.0f%% | %s | %s | %s |\n",
-					wf.Name, wf.TotalRuns, wf.SuccessRate, fmtDur(wf.AvgDurationSec), fmtDur(wf.P95DurationSec), flaky)
+				_, _ = fmt.Fprintf(w, "| %s | %d | %.0f%% | %s | %s | %s | %s |\n",
+					wf.Name, wf.TotalRuns, wf.SuccessRate, fmtDur(wf.AvgDurationSec), fmtDur(wf.P95DurationSec), runnerLabel(wf.Runners), flaky)
 			}
 		}
 
@@ -198,8 +219,8 @@ func (r *ActionsMarkdownRenderer) Render(report *models.ActionsReport, w io.Writ
 	if report.Summary.ReposScanned > 1 {
 		s := report.Summary
 		_, _ = fmt.Fprintf(w, "\n## Org roll-up (%d repos)\n\n", s.ReposScanned)
-		_, _ = fmt.Fprintf(w, "- Total workflows: **%d**\n- Total runs: **%d**\n- Overall success: **%.1f%%**\n- Compute: %.0f min hosted / %.0f min self-hosted\n",
-			s.TotalWorkflows, s.TotalRuns, s.OverallSuccessRate, s.ComputeMinutesHosted, s.ComputeMinutesSelf)
+		_, _ = fmt.Fprintf(w, "- Total workflows: **%d**\n- Total runs: **%d**\n- Overall success: **%.1f%%**\n- Compute: %s hosted / %s self-hosted\n",
+			s.TotalWorkflows, s.TotalRuns, s.OverallSuccessRate, fmtCompute(s.ComputeMinutesHosted), fmtCompute(s.ComputeMinutesSelf))
 		if len(s.FailureHotspots) > 0 {
 			_, _ = fmt.Fprintln(w, "\n### Failure hotspots")
 			_, _ = fmt.Fprintln(w, "\n| Repo | Workflow | Failures | Runs | Fail rate |")
@@ -251,6 +272,45 @@ func fmtDur(sec float64) string {
 		return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
 	}
 	return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
+}
+
+// fmtCompute renders a compute-minutes total in a readable form. Large values
+// are hard to parse as a raw minute count, so an approximate hours (or days)
+// figure is appended, e.g. "17,393 min (≈290 h)".
+func fmtCompute(minutes float64) string {
+	// Round once and use the rounded value for both the displayed count and the
+	// unit-threshold checks so the two stay consistent near boundaries.
+	rounded := minutes
+	if minutes > 0 {
+		rounded = float64(int(minutes + 0.5))
+	}
+	base := fmt.Sprintf("%s min", humanizeInt(int(rounded)))
+	switch {
+	case rounded < 60:
+		return base
+	case rounded < 60*24*45:
+		// Compute is conventionally discussed in minutes/hours; keep hours as the
+		// approximate unit until the total is very large.
+		return fmt.Sprintf("%s (≈%.0f h)", base, rounded/60)
+	default:
+		return fmt.Sprintf("%s (≈%.0f d)", base, rounded/(60*24))
+	}
+}
+
+// runnerLabel gives a compact per-workflow runner-hosting label for tables.
+func runnerLabel(r models.RunnerUsage) string {
+	total := r.GitHubHosted + r.SelfHosted
+	if total == 0 {
+		return "-"
+	}
+	switch {
+	case r.SelfHosted == 0:
+		return "hosted"
+	case r.GitHubHosted == 0:
+		return "self"
+	default:
+		return "mixed"
+	}
 }
 
 func fmtMTBF(hours float64) string {
