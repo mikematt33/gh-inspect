@@ -170,7 +170,7 @@ func workflowFindings(wr models.WorkflowReport, opts Options) []models.Finding {
 		findings = append(findings, models.Finding{
 			Type:        "slow_workflow",
 			Severity:    models.SeverityMedium,
-			Message:     fmt.Sprintf("%q averages %.0fs, exceeding the %.0fs threshold", wr.Name, wr.AvgDurationSec, opts.DurationThresholdSec),
+			Message:     fmt.Sprintf("%q averages %s, exceeding the %s threshold", wr.Name, humanizeSeconds(wr.AvgDurationSec), humanizeSeconds(opts.DurationThresholdSec)),
 			Explanation: "Long-running workflows slow feedback loops and increase compute cost.",
 		})
 	}
@@ -179,19 +179,61 @@ func workflowFindings(wr models.WorkflowReport, opts Options) []models.Finding {
 		findings = append(findings, models.Finding{
 			Type:        "duration_regression",
 			Severity:    models.SeverityLow,
-			Message:     fmt.Sprintf("%q is trending slower (+%.0fs recent vs. earlier)", wr.Name, wr.DurationTrendSec),
+			Message:     fmt.Sprintf("%q is trending slower (+%s recent vs. earlier)", wr.Name, humanizeSeconds(wr.DurationTrendSec)),
 			Explanation: "A rising duration trend suggests growing test suites, added steps, or resource contention.",
 		})
 	}
 
 	if opts.QueueThresholdSec > 0 && wr.AvgQueueSec > opts.QueueThresholdSec {
+		runnerNote := ""
+		if hint := runnerHostingHint(wr.Runners); hint != "" {
+			runnerNote = " (" + hint + ")"
+		}
 		findings = append(findings, models.Finding{
 			Type:        "long_queue_time",
 			Severity:    models.SeverityMedium,
-			Message:     fmt.Sprintf("%q waits %.0fs in queue on average", wr.Name, wr.AvgQueueSec),
+			Message:     fmt.Sprintf("%q waits %s in queue on average%s", wr.Name, humanizeSeconds(wr.AvgQueueSec), runnerNote),
 			Explanation: "Long queue times indicate runner contention or insufficient self-hosted runner capacity.",
 		})
 	}
 
 	return findings
+}
+
+// humanizeSeconds renders a duration expressed in seconds in a compact,
+// human-friendly form (e.g. "45s", "12m30s", "2h05m", "1d03h") instead of a
+// large raw second count that is hard to read.
+func humanizeSeconds(sec float64) string {
+	if sec <= 0 {
+		return "0s"
+	}
+	d := time.Duration(sec * float64(time.Second))
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	if d < 24*time.Hour {
+		return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
+	}
+	return fmt.Sprintf("%dd%02dh", int(d.Hours())/24, int(d.Hours())%24)
+}
+
+// runnerHostingHint summarizes whether a workflow's sampled jobs ran on
+// GitHub-hosted or self-hosted runners. Returns "" when no job-level runner
+// data was sampled.
+func runnerHostingHint(r models.RunnerUsage) string {
+	total := r.GitHubHosted + r.SelfHosted
+	if total == 0 {
+		return ""
+	}
+	switch {
+	case r.SelfHosted == 0:
+		return "GitHub-hosted runners"
+	case r.GitHubHosted == 0:
+		return "self-hosted runners"
+	default:
+		return fmt.Sprintf("%d%% self-hosted runners", int(float64(r.SelfHosted)/float64(total)*100+0.5))
+	}
 }

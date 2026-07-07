@@ -80,6 +80,10 @@ type WorkflowReport struct {
 
 	SlowestJobs []JobDurationSummary `json:"slowest_jobs,omitempty"`
 
+	// Runners summarizes the hosting type (GitHub-hosted vs self-hosted) of the
+	// sampled jobs for this workflow. Empty when no job-level data was sampled.
+	Runners RunnerUsage `json:"runners,omitempty"`
+
 	Findings []Finding `json:"findings,omitempty"`
 }
 

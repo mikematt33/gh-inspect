@@ -146,6 +146,24 @@ func doUpdate(version string) error {
 	downloadUrl := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", owner, repo, version, assetName)
 	checksumUrl := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", owner, repo, version, checksumFile)
 
+	// Locate the current binary and verify we can write to its directory BEFORE
+	// downloading anything, so the user isn't surprised by a permission error
+	// after a long download.
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to locate executable: %w", err)
+	}
+	if realPath, lerr := filepath.EvalSymlinks(exe); lerr == nil {
+		exe = realPath
+	}
+	installDir := filepath.Dir(exe)
+	if !isDirWritable(installDir) {
+		return fmt.Errorf("cannot write to install directory %s.\n"+
+			"gh-inspect is installed in a location that requires elevated permissions.\n"+
+			"Re-run the update with elevated privileges, e.g.:\n\n  sudo gh-inspect update\n\n"+
+			"Alternatively, reinstall gh-inspect into a user-writable directory (such as ~/.local/bin) so future updates don't need sudo", installDir)
+	}
+
 	fmt.Fprintf(os.Stderr, "Downloading %s...\n", downloadUrl)
 
 	// Create temp dir for download
@@ -195,25 +213,13 @@ func doUpdate(version string) error {
 		return fmt.Errorf("failed to extract binary: %w", err)
 	}
 
-	// Locate current binary
-	exe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to locate executable: %w", err)
-	}
-
-	realPath, err := filepath.EvalSymlinks(exe)
-	if err == nil {
-		exe = realPath
-	}
-
 	// Write new binary to a temp file first (in the same directory to allow atomic move)
-	installDir := filepath.Dir(exe)
 	tempDst := filepath.Join(installDir, fmt.Sprintf(".%s.new", filepath.Base(exe)))
 
 	err = os.WriteFile(tempDst, binaryData, 0755)
 	if err != nil {
 		if os.IsPermission(err) {
-			return fmt.Errorf("permission denied writing to %s: please run with sudo", installDir)
+			return fmt.Errorf("permission denied writing to %s: re-run with 'sudo gh-inspect update'", installDir)
 		}
 		return fmt.Errorf("failed to create new binary file: %w", err)
 	}
@@ -225,6 +231,20 @@ func doUpdate(version string) error {
 	}
 
 	return nil
+}
+
+// isDirWritable reports whether the current process can create files in dir.
+// It probes by creating and removing a temporary file, which is more reliable
+// than inspecting permission bits across platforms and ownership setups.
+func isDirWritable(dir string) bool {
+	probe, err := os.CreateTemp(dir, ".gh-inspect-write-test-*")
+	if err != nil {
+		return false
+	}
+	name := probe.Name()
+	_ = probe.Close()
+	_ = os.Remove(name)
+	return true
 }
 
 // downloadChecksums downloads and parses the checksums.txt file

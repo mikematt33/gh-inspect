@@ -26,6 +26,10 @@ import (
 // are registered with Cobra commands via ValidArgsFunction and provide intelligent
 // suggestions based on usage patterns and GitHub API data.
 
+// completionAPITimeout bounds any live GitHub API call made during shell
+// completion so a slow or unreachable network never hangs the user's shell.
+const completionAPITimeout = 2 * time.Second
+
 // recentItem tracks recently used items for completions
 type recentItem struct {
 	Value    string    `json:"value"`
@@ -186,9 +190,13 @@ func completeRepositories(cmd *cobra.Command, args []string, toComplete string) 
 		recent = filtered
 	}
 
-	// Add hint for format
+	// When there is nothing to suggest, show guidance via active help rather than
+	// injecting a literal "owner/repo" token that the shell would repeatedly
+	// insert as if it were a real completion candidate.
 	if len(recent) == 0 {
-		return []string{"owner/repo"}, cobra.ShellCompDirectiveNoFileComp
+		var comps []string
+		comps = cobra.AppendActiveHelp(comps, "Enter a repository as owner/repo (e.g. cli/cli)")
+		return comps, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
 	}
 
 	return recent, cobra.ShellCompDirectiveNoFileComp
@@ -208,8 +216,11 @@ func completeOrganizations(cmd *cobra.Command, args []string, toComplete string)
 	if err == nil && cfg.Global.GitHubToken != "" {
 		client, err := getClientWithToken(cfg)
 		if err == nil {
+			// Bound the network call so tab completion never hangs the shell.
+			ctx, cancel := context.WithTimeout(context.Background(), completionAPITimeout)
+			defer cancel()
 			// Get user's organizations
-			orgs, _, err := client.GetUnderlyingClient().Organizations.List(context.Background(), "", nil)
+			orgs, _, err := client.GetUnderlyingClient().Organizations.List(ctx, "", nil)
 			if err == nil {
 				for _, org := range orgs {
 					if org.Login != nil {
@@ -243,7 +254,9 @@ func completeOrganizations(cmd *cobra.Command, args []string, toComplete string)
 	}
 
 	if len(suggestions) == 0 {
-		return []string{"organization-name"}, cobra.ShellCompDirectiveNoFileComp
+		var comps []string
+		comps = cobra.AppendActiveHelp(comps, "Enter an organization name")
+		return comps, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
 	}
 
 	return suggestions, cobra.ShellCompDirectiveNoFileComp
@@ -263,7 +276,10 @@ func completeUsers(cmd *cobra.Command, args []string, toComplete string) ([]stri
 	if err == nil && cfg.Global.GitHubToken != "" {
 		client, err := getClientWithToken(cfg)
 		if err == nil {
-			user, _, err := client.GetUnderlyingClient().Users.Get(context.Background(), "")
+			// Bound the network call so tab completion never hangs the shell.
+			ctx, cancel := context.WithTimeout(context.Background(), completionAPITimeout)
+			defer cancel()
+			user, _, err := client.GetUnderlyingClient().Users.Get(ctx, "")
 			if err == nil && user.Login != nil {
 				// Add authenticated user at the beginning
 				suggestions = append([]string{*user.Login}, suggestions...)
@@ -283,7 +299,9 @@ func completeUsers(cmd *cobra.Command, args []string, toComplete string) ([]stri
 	}
 
 	if len(suggestions) == 0 {
-		return []string{"username"}, cobra.ShellCompDirectiveNoFileComp
+		var comps []string
+		comps = cobra.AppendActiveHelp(comps, "Enter a GitHub username")
+		return comps, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
 	}
 
 	return suggestions, cobra.ShellCompDirectiveNoFileComp

@@ -168,6 +168,40 @@ func TestParseCronInvalid(t *testing.T) {
 	}
 }
 
+func TestHumanizeSeconds(t *testing.T) {
+	cases := []struct {
+		sec  float64
+		want string
+	}{
+		{0, "0s"},
+		{-5, "0s"},
+		{45, "45s"},
+		{90, "1m30s"},
+		{3661, "1h01m"},
+		{96948, "1d02h"},
+	}
+	for _, c := range cases {
+		if got := humanizeSeconds(c.sec); got != c.want {
+			t.Errorf("humanizeSeconds(%v) = %q, want %q", c.sec, got, c.want)
+		}
+	}
+}
+
+func TestRunnerHostingHint(t *testing.T) {
+	if got := runnerHostingHint(models.RunnerUsage{}); got != "" {
+		t.Errorf("no data hint = %q, want empty", got)
+	}
+	if got := runnerHostingHint(models.RunnerUsage{GitHubHosted: 4}); got != "GitHub-hosted runners" {
+		t.Errorf("hosted hint = %q", got)
+	}
+	if got := runnerHostingHint(models.RunnerUsage{SelfHosted: 3}); got != "self-hosted runners" {
+		t.Errorf("self hint = %q", got)
+	}
+	if got := runnerHostingHint(models.RunnerUsage{GitHubHosted: 1, SelfHosted: 3}); got != "75% self-hosted runners" {
+		t.Errorf("mixed hint = %q", got)
+	}
+}
+
 // --- engine test with a mock Fetcher ---
 
 type mockFetcher struct {
