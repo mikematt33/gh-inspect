@@ -278,16 +278,22 @@ func fmtDur(sec float64) string {
 // are hard to parse as a raw minute count, so an approximate hours (or days)
 // figure is appended, e.g. "17,393 min (≈290 h)".
 func fmtCompute(minutes float64) string {
-	base := fmt.Sprintf("%s min", humanizeInt(int(minutes+0.5)))
+	// Round once and use the rounded value for both the displayed count and the
+	// unit-threshold checks so the two stay consistent near boundaries.
+	rounded := minutes
+	if minutes > 0 {
+		rounded = float64(int(minutes + 0.5))
+	}
+	base := fmt.Sprintf("%s min", humanizeInt(int(rounded)))
 	switch {
-	case minutes < 60:
+	case rounded < 60:
 		return base
-	case minutes < 60*24*45:
+	case rounded < 60*24*45:
 		// Compute is conventionally discussed in minutes/hours; keep hours as the
 		// approximate unit until the total is very large.
-		return fmt.Sprintf("%s (≈%.0f h)", base, minutes/60)
+		return fmt.Sprintf("%s (≈%.0f h)", base, rounded/60)
 	default:
-		return fmt.Sprintf("%s (≈%.0f d)", base, minutes/(60*24))
+		return fmt.Sprintf("%s (≈%.0f d)", base, rounded/(60*24))
 	}
 }
 

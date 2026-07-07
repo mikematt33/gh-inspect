@@ -207,7 +207,9 @@ func humanizeSeconds(sec float64) string {
 	if sec <= 0 {
 		return "0s"
 	}
-	d := time.Duration(sec * float64(time.Second))
+	// Round to the nearest second so values just below a unit boundary (e.g.
+	// 59.6s) don't under-report as "59s".
+	d := time.Duration(sec*float64(time.Second) + float64(time.Second)/2)
 	if d < time.Minute {
 		return fmt.Sprintf("%ds", int(d.Seconds()))
 	}
